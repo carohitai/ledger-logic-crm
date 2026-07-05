@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const { data: me } = await supabase
     .from("staff")
-    .select("extension, full_name")
+    .select("id, extension, full_name")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (!me?.extension) {
@@ -56,6 +56,14 @@ export async function POST(request: Request) {
 
   try {
     const callId = await dial(me.extension, callee);
+    // Log the attempt so the follow-up cron can track its outcome via CDR.
+    await supabase.from("call_logs").insert({
+      client_id: clientId,
+      staff_id: me.id,
+      pbx_call_id: callId,
+      caller_ext: me.extension,
+      callee,
+    });
     return NextResponse.json({ ok: true, callId, extension: me.extension, callee });
   } catch (e) {
     return NextResponse.json(

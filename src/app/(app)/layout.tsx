@@ -36,6 +36,9 @@ export default async function AppLayout({
               className="h-6 w-auto"
             />
           </Link>
+          <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
+            Dashboard
+          </Link>
           <Link href="/my-clients" className="text-slate-600 hover:text-slate-900">
             My Clients
           </Link>

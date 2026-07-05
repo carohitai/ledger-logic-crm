@@ -30,8 +30,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
+  // API routes enforce their own auth (session check or cron secret) and
+  // must return JSON errors, not login redirects.
   const isPublic =
-    path === "/" || path.startsWith("/login") || path.startsWith("/auth");
+    path === "/" ||
+    path.startsWith("/login") ||
+    path.startsWith("/auth") ||
+    path.startsWith("/api");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
