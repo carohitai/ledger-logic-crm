@@ -3,11 +3,14 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { downloadClientList } from "@/lib/graph";
 import { runSync, type SyncReport } from "@/lib/import/sync";
 
 export interface ImportState {
   report: SyncReport | null;
   error: string | null;
+  /** Which file the report came from, e.g. "Client List Final 22062026.xlsx (SharePoint)". */
+  source: string | null;
 }
 
 async function requireAdmin() {
@@ -46,24 +49,43 @@ export async function runImport(
   _prev: ImportState,
   formData: FormData
 ): Promise<ImportState> {
+  let source: string | null = null;
   try {
     const supabase = await requireAdmin();
-    const file = formData.get("file") as File | null;
-    if (!file || file.size === 0) return { report: null, error: "Choose a file first." };
     const mode = String(formData.get("mode") ?? "dryrun");
     const applyRenames = formData.get("applyRenames") === "on";
 
-    const records = parseFile(file.name, await file.arrayBuffer());
+    let filename: string;
+    let buf: ArrayBuffer;
+    if (formData.get("source") === "sharepoint") {
+      const dl = await downloadClientList();
+      filename = dl.name;
+      buf = dl.buf;
+      source = `${dl.name} (SharePoint)`;
+    } else {
+      const file = formData.get("file") as File | null;
+      if (!file || file.size === 0)
+        return { report: null, error: "Choose a file first.", source: null };
+      filename = file.name;
+      buf = await file.arrayBuffer();
+      source = `${file.name} (upload)`;
+    }
+
+    const records = parseFile(filename, buf);
     if (records.length === 0)
-      return { report: null, error: "No data rows found in the file." };
+      return { report: null, error: "No data rows found in the file.", source };
 
     const report = await runSync(supabase, records, {
-      filename: file.name,
+      filename,
       dryRun: mode !== "commit",
       applyRenames,
     });
-    return { report, error: null };
+    return { report, error: null, source };
   } catch (e) {
-    return { report: null, error: e instanceof Error ? e.message : String(e) };
+    return {
+      report: null,
+      error: e instanceof Error ? e.message : String(e),
+      source,
+    };
   }
 }
