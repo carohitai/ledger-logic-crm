@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Kolte & Associates LLP — design tokens (from brand design system)
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --brand-green: #94c047;
+  --brand-green-deep: #7ca838;
+  --brand-green-soft: #b8d578;
+  --brand-green-pale: #eaf2d6;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --brand-blue: #1e429f;
+  --brand-blue-deep: #16306e;
+  --brand-blue-soft: #4a6fbf;
+  --brand-blue-pale: #e5ebf6;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --earth-moss: #6b7f3a;
+  --earth-sage: #a8b98a;
+  --earth-slate: #6f7a8c;
+  --earth-bark: #3d4a4a;
+
+  --paper: #fbfaf6;
+  --paper-2: #f5f2ea;
+  --paper-3: #ece7dc;
+  --ink-900: #1a2233;
+  --ink-700: #2f3a52;
+  --ink-500: #5c6679;
+  --ink-400: #8a92a3;
+  --ink-300: #bcc1cc;
+  --ink-200: #dde0e6;
+  --ink-100: #eff1f4;
+  --white: #ffffff;
+
+  --border-default: var(--ink-200);
+  --border-strong: var(--ink-300);
+  --warning: #c99a4e;
+  --danger: #b23a3a;
+
+  --font-display: var(--font-eb-garamond), "Garamond", Georgia, serif;
+  --font-sans: var(--font-montserrat), "Inter", -apple-system, "Segoe UI", sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 3px rgba(26, 34, 51, 0.06), 0 1px 2px rgba(26, 34, 51, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 34, 51, 0.08), 0 1px 3px rgba(26, 34, 51, 0.05);
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink-900);
+  font-family: var(--font-sans);
+}
+
+/* Signature letterhead dotted divider */
+.dot-rule {
+  display: block;
+  height: 8px;
+  background-image: radial-gradient(circle, var(--brand-blue) 1.5px, transparent 1.6px);
+  background-size: 14px 8px;
+  background-repeat: repeat-x;
+  background-position: left center;
+}
+.dot-rule.green {
+  background-image: radial-gradient(circle, var(--brand-green) 1.5px, transparent 1.6px);
+}
+
+@keyframes ll-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ll-rise {
+  animation: ll-rise 700ms var(--ease-emphasized) both;
 }

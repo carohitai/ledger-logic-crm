@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { dial, recentCdr, type CdrRecord } from "@/lib/yeastar";
-import { sendCallbackTemplate, whatsappConfigured } from "@/lib/whatsapp";
+import { sendCallbackTemplate, toWhatsAppNumber, whatsappConfigured } from "@/lib/whatsapp";
 
 export const maxDuration = 60;
 
@@ -97,6 +97,14 @@ export async function GET(request: Request) {
           await sendCallbackTemplate(client.phone, [client.name]);
           whatsappSent = true;
           summary.whatsapp++;
+          await db.from("whatsapp_messages").insert({
+            client_id: log.client_id,
+            phone: toWhatsAppNumber(client.phone),
+            direction: "out",
+            body: `Missed-call follow-up sent (template: call_back_work, name: ${client.name})`,
+            template_id: "call_back_work",
+            status: "sent",
+          });
         } catch (e) {
           whatsappError = e instanceof Error ? e.message : String(e);
           summary.errors.push(`WA ${client?.name}: ${whatsappError}`);
