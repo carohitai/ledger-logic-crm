@@ -3,7 +3,7 @@
 
 const SEND_URL = process.env.NEXTEL_SEND_URL;
 const API_KEY = process.env.NEXTEL_API_KEY;
-const TEMPLATE_ID = process.env.WHATSAPP_TEMPLATE_ID ?? "call_back_work";
+const TEMPLATE_ID = process.env.WHATSAPP_TEMPLATE_ID ?? "call_back";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG ?? "en";
 
 export function whatsappConfigured(): boolean {
@@ -18,9 +18,9 @@ export function toWhatsAppNumber(raw: string): string {
 }
 
 /**
- * Sends the approved "call_back_work" button template.
+ * Sends the approved "call_back" button template (verified live 2026-07-07:
+ * language "en", exactly two args — client name, firm/staff name).
  * `sender_phone` in Nextel's schema is the RECIPIENT's mobile number.
- * templateArgs fill the template's placeholders (this template takes one).
  */
 export async function sendCallbackTemplate(
   phone: string,

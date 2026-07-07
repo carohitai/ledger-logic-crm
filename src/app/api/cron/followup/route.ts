@@ -94,15 +94,18 @@ export async function GET(request: Request) {
       let whatsappError: string | null = null;
       if (whatsappConfigured() && client?.phone && log.attempt === 1) {
         try {
-          await sendCallbackTemplate(client.phone, [client.name]);
+          await sendCallbackTemplate(client.phone, [
+            client.name,
+            staff?.full_name ?? "Kolte & Associates LLP",
+          ]);
           whatsappSent = true;
           summary.whatsapp++;
           await db.from("whatsapp_messages").insert({
             client_id: log.client_id,
             phone: toWhatsAppNumber(client.phone),
             direction: "out",
-            body: `Missed-call follow-up sent (template: call_back_work, name: ${client.name})`,
-            template_id: "call_back_work",
+            body: `Missed-call follow-up sent (template: call_back, name: ${client.name})`,
+            template_id: "call_back",
             status: "sent",
           });
         } catch (e) {
