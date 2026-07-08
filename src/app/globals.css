@@ -83,3 +83,9 @@ body {
 .ll-rise {
   animation: ll-rise 700ms var(--ease-emphasized) both;
 }
+
+@keyframes ll-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

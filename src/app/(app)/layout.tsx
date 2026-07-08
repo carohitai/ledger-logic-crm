@@ -52,6 +52,9 @@ export default async function AppLayout({
           <NavLink href="/dashboard">Dashboard</NavLink>
           <NavLink href="/my-clients">My Clients</NavLink>
           <NavLink href="/clients">All Clients</NavLink>
+          {(isAdmin || me?.app_role === "partner") && (
+            <NavLink href="/reports">Reports</NavLink>
+          )}
           {isAdmin && (
             <>
               <NavLink href="/admin/import">Import</NavLink>

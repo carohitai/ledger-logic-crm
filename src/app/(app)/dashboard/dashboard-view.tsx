@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 export interface StaffStat {
@@ -148,7 +148,6 @@ export function DashboardView({
   const [statP, setStatP] = useState(0);
   const [chartP, setChartP] = useState(0);
   const [barsOn, setBarsOn] = useState(false);
-  const [, startTransition] = useTransition();
   const statsRef = useRef<HTMLElement>(null);
   const chartsRef = useRef<HTMLElement>(null);
 
@@ -437,10 +436,10 @@ export function DashboardView({
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {DEPTS.map((d, j) => (
-              <button
+              <Link
                 key={d.key}
-                onClick={() => startTransition(() => setDept(d.key))}
-                className="flex flex-col gap-2.5 p-[22px] text-left transition-all duration-200 hover:-translate-y-px hover:shadow-md"
+                href={`/reports?dept=${d.key}`}
+                className="flex flex-col gap-2.5 p-[22px] no-underline transition-all duration-200 hover:-translate-y-px hover:shadow-md"
                 style={card}
               >
                 <span className="text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.14em", color: d.color }}>
@@ -453,13 +452,13 @@ export function DashboardView({
                   {deptTotals[j]} clients · {stats.filter((s) => s[d.key] > 0).length} staff allotted
                 </span>
                 <span className="mt-auto inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--brand-blue)" }}>
-                  View allotment
+                  View report
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14" />
                     <path d="m12 5 7 7-7 7" />
                   </svg>
                 </span>
-              </button>
+              </Link>
             ))}
           </div>
         </section>
