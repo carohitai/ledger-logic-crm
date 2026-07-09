@@ -66,6 +66,11 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, callId, extension: me.extension, callee });
   } catch (e) {
+    console.error("[api/call] dial failed", {
+      caller_ext: me.extension,
+      callee,
+      error: e instanceof Error ? e.message : String(e),
+    });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Call could not be placed" },
       { status: 502 }
