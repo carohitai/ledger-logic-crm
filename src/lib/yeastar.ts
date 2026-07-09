@@ -10,6 +10,29 @@ const DIAL_PREFIX = process.env.YEASTAR_DIAL_PREFIX ?? "";
 
 const base = () => `https://${DOMAIN}:${PORT}/openapi/v1.0`;
 
+/**
+ * Turns an undici "fetch failed" (thrown before any HTTP response) into an
+ * actionable message that names the real cause, so the UI and Vercel logs show
+ * whether it's DNS, a closed port, an IP-blocked firewall, or a TLS cert issue
+ * rather than the opaque "fetch failed".
+ */
+function unreachable(e: unknown): Error {
+  const err = e as { cause?: { code?: string }; message?: string };
+  const code = err?.cause?.code ?? "";
+  let hint: string;
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN")
+    hint = "domain does not resolve — check YEASTAR_PBX_DOMAIN";
+  else if (code === "ECONNREFUSED")
+    hint = "connection refused — check YEASTAR_PORT and that OpenAPI is enabled on the PBX";
+  else if (code === "ETIMEDOUT" || code.includes("TIMEOUT"))
+    hint =
+      "connection timed out — the PBX is likely blocking this server's IP; allowlist the API caller or open the API port";
+  else if (code.includes("CERT") || code.includes("SSL") || code.startsWith("ERR_TLS"))
+    hint = `TLS certificate rejected (${code}) — the PBX cert is self-signed or does not match ${DOMAIN}`;
+  else hint = code || err?.message || "unknown network error";
+  return new Error(`Cannot reach Yeastar PBX at ${base()}: ${hint}`);
+}
+
 // Module-level token cache. Persists across requests on a warm serverless
 // instance; a cold start simply re-authenticates.
 let cached: { token: string; expiresAt: number } | null = null;
@@ -20,12 +43,17 @@ async function getToken(): Promise<string> {
     throw new Error("Yeastar credentials are not configured");
   }
 
-  const res = await fetch(`${base()}/get_token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: CLIENT_ID, password: CLIENT_SECRET }),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base()}/get_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: CLIENT_ID, password: CLIENT_SECRET }),
+      cache: "no-store",
+    });
+  } catch (e) {
+    throw unreachable(e);
+  }
   const data = await res.json();
   if (data.errcode !== 0 || !data.access_token) {
     throw new Error(`Yeastar auth failed: ${data.errmsg ?? res.status}`);
@@ -94,12 +122,17 @@ export async function recentCdr(sinceTimestamp: number): Promise<CdrRecord[]> {
  */
 export async function dial(caller: string, callee: string): Promise<string> {
   const token = await getToken();
-  const res = await fetch(`${base()}/call/dial?access_token=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ caller, callee }),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base()}/call/dial?access_token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caller, callee }),
+      cache: "no-store",
+    });
+  } catch (e) {
+    throw unreachable(e);
+  }
   const data = await res.json();
   if (data.errcode !== 0) {
     // A stale cached token surfaces as an auth error — clear and retry once.
