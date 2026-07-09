@@ -2,12 +2,13 @@
 
 import { useActionState } from "react";
 import type { LinkStatus } from "@/lib/graph";
+import { SubmitButton } from "@/components/button";
 import { runImport, type ImportState } from "./actions";
 
 const initial: ImportState = { report: null, error: null, source: null };
 
 export function ImportForm({ link }: { link: LinkStatus }) {
-  const [state, formAction, pending] = useActionState(runImport, initial);
+  const [state, formAction] = useActionState(runImport, initial);
   const r = state.report;
 
   return (
@@ -56,22 +57,12 @@ export function ImportForm({ link }: { link: LinkStatus }) {
               Apply rename candidates on commit (only after reviewing them in a dry run)
             </label>
             <div className="flex gap-2">
-              <button
-                name="mode"
-                value="dryrun"
-                disabled={pending}
-                className="rounded-md border border-slate-300 px-3 py-1.5 font-medium hover:bg-slate-50 disabled:opacity-50"
-              >
-                {pending ? "Running…" : "Dry run from SharePoint"}
-              </button>
-              <button
-                name="mode"
-                value="commit"
-                disabled={pending}
-                className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white disabled:opacity-50"
-              >
-                {pending ? "Running…" : "Import from SharePoint"}
-              </button>
+              <SubmitButton name="mode" value="dryrun" variant="secondary" size="sm">
+                Dry run from SharePoint
+              </SubmitButton>
+              <SubmitButton name="mode" value="commit" variant="ink" size="sm">
+                Import from SharePoint
+              </SubmitButton>
             </div>
           </>
         )}
@@ -85,22 +76,12 @@ export function ImportForm({ link }: { link: LinkStatus }) {
           Apply rename candidates on commit (only after reviewing them in a dry run)
         </label>
         <div className="flex gap-2">
-          <button
-            name="mode"
-            value="dryrun"
-            disabled={pending}
-            className="rounded-md border border-slate-300 px-3 py-1.5 font-medium hover:bg-slate-50 disabled:opacity-50"
-          >
-            {pending ? "Running…" : "Dry run"}
-          </button>
-          <button
-            name="mode"
-            value="commit"
-            disabled={pending}
-            className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white disabled:opacity-50"
-          >
-            {pending ? "Running…" : "Commit import"}
-          </button>
+          <SubmitButton name="mode" value="dryrun" variant="secondary" size="sm">
+            Dry run
+          </SubmitButton>
+          <SubmitButton name="mode" value="commit" variant="ink" size="sm">
+            Commit import
+          </SubmitButton>
         </div>
       </form>
 

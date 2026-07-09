@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AppLink } from "@/components/nav-progress";
 
 export function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const active = pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
   return (
-    <Link
+    <AppLink
       href={href}
+      inlineSpinner
       style={
         active
           ? {
@@ -19,9 +20,9 @@ export function NavLink({ href, children }: { href: string; children: React.Reac
             }
           : { color: "var(--ink-500)" }
       }
-      className="transition-colors hover:!text-[var(--ink-900)]"
+      className="inline-flex items-center transition-colors hover:!text-[var(--ink-900)]"
     >
       {children}
-    </Link>
+    </AppLink>
   );
 }

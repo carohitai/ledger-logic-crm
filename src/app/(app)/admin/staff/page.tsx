@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { SubmitButton } from "@/components/button";
 
 export default async function StaffPage() {
   const supabase = await createClient();
@@ -80,9 +81,9 @@ export default async function StaffPage() {
                       placeholder="name@kolteassociates.in"
                       className="w-56 rounded-md border border-slate-300 px-2 py-1"
                     />
-                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+                    <SubmitButton variant="secondary" size="xs">
                       Save
-                    </button>
+                    </SubmitButton>
                   </form>
                 </td>
                 <td className="px-3 py-2 text-slate-600">
@@ -96,9 +97,9 @@ export default async function StaffPage() {
                       placeholder="e.g. Sneha"
                       className="w-28 rounded-md border border-slate-300 px-2 py-1"
                     />
-                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50">
+                    <SubmitButton variant="secondary" size="xs">
                       Add
-                    </button>
+                    </SubmitButton>
                   </form>
                 </td>
               </tr>

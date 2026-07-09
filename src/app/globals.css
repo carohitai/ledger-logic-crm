@@ -89,3 +89,94 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* ---- Loading spinner (rings around the clicked control) ---- */
+.ll-spinner {
+  display: inline-block;
+  flex: none;
+  border-style: solid;
+  border-radius: var(--radius-pill);
+  animation: ll-spin 640ms linear infinite;
+}
+
+/* ---- Global top navigation progress bar ---- */
+.ll-topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 100;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+  opacity: 0;
+  transition: opacity 240ms var(--ease-standard);
+}
+.ll-topbar[data-active="true"] {
+  opacity: 1;
+}
+.ll-topbar__bar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    var(--brand-blue) 0%,
+    var(--brand-blue-soft) 40%,
+    var(--brand-green) 100%
+  );
+  animation: ll-topbar-sweep 1150ms var(--ease-emphasized) infinite;
+}
+@keyframes ll-topbar-sweep {
+  0% {
+    transform: translateX(-100%) scaleX(0.35);
+  }
+  55% {
+    transform: translateX(20%) scaleX(0.55);
+  }
+  100% {
+    transform: translateX(120%) scaleX(0.4);
+  }
+}
+
+/* ---- Press feedback for interactive controls ---- */
+.ll-press {
+  transition:
+    transform 120ms var(--ease-standard),
+    box-shadow 160ms var(--ease-standard),
+    background-color 160ms var(--ease-standard),
+    border-color 160ms var(--ease-standard),
+    opacity 160ms var(--ease-standard);
+}
+.ll-press:not(:disabled):active {
+  transform: scale(0.975);
+}
+.ll-press:focus-visible {
+  outline: 2px solid var(--brand-blue-soft);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-spinner,
+  .ll-topbar__bar,
+  .ll-rise {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .ll-topbar__bar {
+    transform: none;
+    animation: ll-topbar-pulse 1200ms ease-in-out infinite;
+  }
+  .ll-press:not(:disabled):active {
+    transform: none;
+  }
+}
+@keyframes ll-topbar-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
