@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendCallbackTemplate, toWhatsAppNumber, whatsappConfigured } from "@/lib/whatsapp";
+import { sendWhatsAppTemplate, toWhatsAppNumber, whatsappConfigured } from "@/lib/whatsapp";
 import { WA_TEMPLATES, renderTemplate } from "@/lib/whatsapp-templates";
 
 // Send a WhatsApp follow-up to a client via Nextel. The client is fetched
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, phone")
+    .select("id, name, phone, trade_name, pan, gstin, gst_frequency")
     .eq("id", clientId)
     .maybeSingle();
   if (!client) {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendCallbackTemplate(client.phone, [client.name]);
+    await sendWhatsAppTemplate(client.phone, template.nextel, template.nextel.args(client));
     await supabase.from("whatsapp_messages").insert({
       client_id: client.id,
       phone: toWhatsAppNumber(client.phone),
