@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AppLink } from "@/components/nav-progress";
 import { SubmitButton } from "@/components/button";
+import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { Donut, StatCard, cardStyle, useProgress, useReveal } from "@/components/charts";
 
 const DEPTS = [
@@ -17,6 +18,7 @@ export interface FollowUp {
   client: string;
   pan: string | null;
   cat: string | null;
+  phone: string | null;
   status: string;
   pillBg: string;
   pillFg: string;
@@ -134,6 +136,7 @@ export function UserDashboardView({
                     <th className="px-4 py-[9px] text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.1em" }}>Client</th>
                     <th className="px-4 py-[9px] text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.1em" }}>PAN</th>
                     <th className="px-4 py-[9px] text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.1em" }}>Cat.</th>
+                    <th className="px-4 py-[9px] text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.1em" }}>Mobile</th>
                     <th className="px-4 py-[9px] text-[11px] font-semibold uppercase" style={{ letterSpacing: "0.1em" }}>Status</th>
                   </tr>
                 </thead>
@@ -141,14 +144,29 @@ export function UserDashboardView({
                   {followUps.map((f) => (
                     <tr key={f.id} style={{ borderTop: "1px solid var(--ink-100)" }} className="hover:bg-[var(--paper)]">
                       <td className="px-4 py-[11px] font-semibold" style={{ color: "var(--ink-900)" }}>
-                        <Link href={`/clients/${f.id}`} className="no-underline" style={{ color: "inherit" }}>
+                        <AppLink
+                          href={`/clients/${f.id}`}
+                          title="Open client master summary"
+                          inlineSpinner
+                          className="no-underline transition-colors hover:!text-[var(--brand-blue)] hover:underline"
+                          style={{ color: "inherit" }}
+                        >
                           {f.client}
-                        </Link>
+                        </AppLink>
                       </td>
                       <td className="px-4 py-[11px] font-mono text-[11.5px]" style={{ color: "var(--ink-500)" }}>{f.pan ?? "—"}</td>
                       <td className="px-4 py-[11px]">{f.cat ?? "—"}</td>
                       <td className="px-4 py-[11px]">
-                        <span className="px-[11px] py-[3px] text-[11px] font-semibold" style={{ borderRadius: "var(--radius-pill)", background: f.pillBg, color: f.pillFg }}>
+                        <div className="flex items-center gap-2">
+                          <span className="whitespace-nowrap text-[12.5px] tabular-nums" style={{ color: "var(--ink-700)" }}>
+                            {f.phone ?? "—"}
+                          </span>
+                          <CallIconButton client={{ id: f.id, name: f.client, phone: f.phone }} />
+                          <WhatsAppIconButton client={{ id: f.id, name: f.client, phone: f.phone }} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-[11px]">
+                        <span className="whitespace-nowrap px-[11px] py-[3px] text-[11px] font-semibold" style={{ borderRadius: "var(--radius-pill)", background: f.pillBg, color: f.pillFg }}>
                           {f.status}
                         </span>
                       </td>
