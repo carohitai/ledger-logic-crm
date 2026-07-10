@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { AppLink } from "@/components/nav-progress";
+import { NavSubmitButton } from "@/components/button";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -77,9 +78,9 @@ export default async function ClientsPage({
           <option value="missing_from_sheet">missing from sheet</option>
           <option value="archived">archived</option>
         </select>
-        <button className="rounded-md bg-slate-900 px-3 py-1.5 text-white">
+        <NavSubmitButton variant="ink" size="sm">
           Filter
-        </button>
+        </NavSubmitButton>
       </form>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
@@ -100,12 +101,13 @@ export default async function ClientsPage({
             {(clients ?? []).map((c) => (
               <tr key={c.id} className="border-t border-slate-100">
                 <td className="px-3 py-2">
-                  <Link
+                  <AppLink
                     href={`/clients/${c.id}`}
+                    inlineSpinner
                     className="font-medium text-slate-900 hover:underline"
                   >
                     {c.name}
-                  </Link>
+                  </AppLink>
                 </td>
                 <td className="px-3 py-2 text-slate-600">{c.trade_name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{c.pan}</td>
@@ -123,25 +125,27 @@ export default async function ClientsPage({
       </div>
 
       {pages > 1 && (
-        <div className="flex gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           {page > 1 && (
-            <Link
-              className="rounded-md border border-slate-300 px-3 py-1"
+            <AppLink
+              inlineSpinner
+              className="ll-press inline-flex items-center rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
               href={{ query: { ...params, page: page - 1 } }}
             >
               ← Prev
-            </Link>
+            </AppLink>
           )}
           <span className="px-2 py-1 text-slate-500">
             Page {page} of {pages}
           </span>
           {page < pages && (
-            <Link
-              className="rounded-md border border-slate-300 px-3 py-1"
+            <AppLink
+              inlineSpinner
+              className="ll-press inline-flex items-center rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
               href={{ query: { ...params, page: page + 1 } }}
             >
               Next →
-            </Link>
+            </AppLink>
           )}
         </div>
       )}

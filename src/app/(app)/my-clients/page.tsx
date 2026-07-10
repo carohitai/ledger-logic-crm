@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink } from "@/components/nav-progress";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABELS, type AllotmentRole } from "@/lib/import/normalize";
 import { StatusBadge } from "@/components/status-badge";
@@ -52,12 +52,13 @@ export default async function MyClientsPage() {
                 {list!.map((c) => (
                   <tr key={`${role}-${c.id}`} className="border-t border-slate-100">
                     <td className="px-3 py-2">
-                      <Link
+                      <AppLink
                         href={`/clients/${c.id}`}
+                        inlineSpinner
                         className="font-medium text-slate-900 hover:underline"
                       >
                         {c.name}
-                      </Link>
+                      </AppLink>
                     </td>
                     <td className="px-3 py-2 text-slate-600">{c.trade_name}</td>
                     <td className="px-3 py-2 font-mono text-xs">{c.pan}</td>

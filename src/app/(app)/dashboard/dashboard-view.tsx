@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AppLink } from "@/components/nav-progress";
+import { SubmitButton } from "@/components/button";
 
 export interface StaffStat {
   id: string;
@@ -436,7 +438,7 @@ export function DashboardView({
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {DEPTS.map((d, j) => (
-              <Link
+              <AppLink
                 key={d.key}
                 href={`/reports?dept=${d.key}`}
                 className="flex flex-col gap-2.5 p-[22px] no-underline transition-all duration-200 hover:-translate-y-px hover:shadow-md"
@@ -458,7 +460,7 @@ export function DashboardView({
                     <path d="m12 5 7 7-7 7" />
                   </svg>
                 </span>
-              </Link>
+              </AppLink>
             ))}
           </div>
         </section>
@@ -510,17 +512,9 @@ export function DashboardView({
                   </span>
                   {!a.acknowledged && (
                     <form action={() => ack(a.id)}>
-                      <button
-                        className="cursor-pointer px-3 py-[5px] text-[11.5px] font-semibold transition-colors hover:bg-[var(--paper-2)] active:scale-[0.98]"
-                        style={{
-                          border: "1px solid var(--border-strong)",
-                          background: "var(--white)",
-                          borderRadius: "var(--radius-md)",
-                          color: "var(--ink-700)",
-                        }}
-                      >
+                      <SubmitButton variant="secondary" size="xs">
                         Acknowledge
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </li>

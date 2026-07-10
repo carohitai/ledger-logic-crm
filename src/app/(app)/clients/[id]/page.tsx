@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABELS, type AllotmentRole } from "@/lib/import/normalize";
 import { StatusBadge } from "@/components/status-badge";
+import { SubmitButton } from "@/components/button";
 import { CallButton } from "./call-button";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
@@ -153,9 +154,9 @@ export default async function ClientDetailPage({
                   </div>
                 );
               })}
-              <button className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-white">
+              <SubmitButton variant="ink" size="sm" className="mt-2">
                 Save allotments
-              </button>
+              </SubmitButton>
             </form>
           ) : (
             <dl className="space-y-2 text-sm">

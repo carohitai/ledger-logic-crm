@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { NavProgressProvider } from "@/components/nav-progress";
 import { SignOutButton } from "./signout";
 import { NavLink } from "./nav-link";
 
@@ -34,6 +35,7 @@ export default async function AppLayout({
     .toUpperCase();
 
   return (
+    <NavProgressProvider>
     <div className="flex min-h-screen flex-col" style={{ background: "var(--paper)" }}>
       <header
         className="sticky top-0 z-50 bg-white"
@@ -93,5 +95,6 @@ export default async function AppLayout({
         </p>
       </footer>
     </div>
+    </NavProgressProvider>
   );
 }

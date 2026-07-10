@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { AppLink } from "@/components/nav-progress";
+import { SubmitButton } from "@/components/button";
 import { Donut, StatCard, cardStyle, useProgress, useReveal } from "@/components/charts";
 
 const DEPTS = [
@@ -117,9 +119,9 @@ export function UserDashboardView({
               <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
                 My clients — follow-up status
               </h3>
-              <Link href="/my-clients" className="text-xs font-semibold no-underline" style={{ color: "var(--brand-blue)" }}>
+              <AppLink href="/my-clients" inlineSpinner className="inline-flex items-center text-xs font-semibold no-underline" style={{ color: "var(--brand-blue)" }}>
                 View all my clients
-              </Link>
+              </AppLink>
             </div>
             {followUps.length === 0 ? (
               <p className="px-6 pb-6 text-sm" style={{ color: "var(--ink-400)" }}>
@@ -194,12 +196,9 @@ export function UserDashboardView({
                   {a.time}
                 </span>
                 <form action={() => ack(a.id)}>
-                  <button
-                    className="cursor-pointer px-3 py-[5px] text-[11.5px] font-semibold transition-colors hover:bg-[var(--paper-2)] active:scale-[0.98]"
-                    style={{ border: "1px solid var(--border-strong)", background: "var(--white)", borderRadius: "var(--radius-md)", color: "var(--ink-700)" }}
-                  >
+                  <SubmitButton variant="secondary" size="xs">
                     Acknowledge
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}

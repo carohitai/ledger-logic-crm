@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/button";
+
+const MicrosoftLogo = (
+  <svg width="17" height="17" viewBox="0 0 21 21" aria-hidden="true">
+    <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+    <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+    <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+    <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+  </svg>
+);
 
 const GROUP = [
   { src: "/logos/kolte-associates.png", alt: "Kolte & Associates LLP" },
@@ -111,31 +121,16 @@ export default function LoginPage() {
             Sign in to continue
           </div>
 
-          <button
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={signInWithMicrosoft}
-            disabled={busy}
-            className="flex w-full items-center justify-center gap-2.5 px-4 py-3 text-sm font-semibold text-white transition-colors active:scale-[0.98]"
-            style={{
-              background: "var(--brand-blue)",
-              borderRadius: "var(--radius-md)",
-              opacity: busy ? 0.7 : 1,
-            }}
+            loading={busy}
+            icon={MicrosoftLogo}
           >
-            {busy ? (
-              <span
-                className="h-4 w-4 rounded-full border-2 border-white/35"
-                style={{ borderTopColor: "#fff", animation: "ll-spin 700ms linear infinite" }}
-              />
-            ) : (
-              <svg width="17" height="17" viewBox="0 0 21 21" aria-hidden="true">
-                <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-                <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-                <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-                <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-              </svg>
-            )}
-            <span>{busy ? "Signing in…" : "Sign in with Microsoft 365"}</span>
-          </button>
+            {busy ? "Signing in…" : "Sign in with Microsoft 365"}
+          </Button>
 
           <p
             className="m-0 text-center text-[12.5px] leading-snug"
@@ -168,13 +163,9 @@ export default function LoginPage() {
                 className="w-full px-3 py-2 text-sm"
                 style={{ border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)" }}
               />
-              <button
-                disabled={busy}
-                className="w-full px-3 py-2 text-sm font-semibold text-white"
-                style={{ background: "var(--ink-900)", borderRadius: "var(--radius-md)" }}
-              >
+              <Button type="submit" variant="ink" size="md" fullWidth loading={busy}>
                 {busy ? "Signing in…" : "Sign in with email"}
-              </button>
+              </Button>
             </form>
           ) : (
             <button
