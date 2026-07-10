@@ -9,6 +9,7 @@ import {
   useProgress,
   useReveal,
 } from "@/components/charts";
+import { StaffSummaryModal } from "@/components/staff-summary-modal";
 
 export interface ReportStaff {
   id: string;
@@ -49,6 +50,7 @@ const GRADE_ORDER = ["A++", "A+", "A", "B", "C", "D", "E", "NA"];
 
 export function ReportsView({ data, initialDept }: { data: ReportsData; initialDept: DeptKey }) {
   const [dept, setDept] = useState<DeptKey>(initialDept);
+  const [drill, setDrill] = useState<{ id: string; name: string } | null>(null);
   const stats = useReveal<HTMLElement>();
   const charts = useReveal<HTMLElement>();
   const statP = useProgress(stats.shown, 1100);
@@ -69,6 +71,9 @@ export function ReportsView({ data, initialDept }: { data: ReportsData; initialD
 
   return (
     <div className="flex flex-col gap-10">
+      {drill && (
+        <StaffSummaryModal staffId={drill.id} staffName={drill.name} onClose={() => setDrill(null)} />
+      )}
       {/* Hero */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
@@ -146,9 +151,14 @@ export function ReportsView({ data, initialDept }: { data: ReportsData; initialD
               const msgPct = r.total ? Math.round((r.msgsDone / r.total) * 100) : 0;
               return (
                 <div key={r.id} className="grid grid-cols-[130px_1fr_1fr] items-center gap-3.5">
-                  <span className="truncate text-[12.5px] font-semibold" style={{ color: "var(--ink-900)" }}>
+                  <button
+                    onClick={() => setDrill({ id: r.id, name: r.name })}
+                    title="View calling & messaging summary"
+                    className="max-w-full cursor-pointer justify-self-start truncate text-left text-[12.5px] font-semibold"
+                    style={{ color: "var(--brand-blue-deep)", borderBottom: "1px dashed var(--brand-blue-soft)" }}
+                  >
                     {r.name}
-                  </span>
+                  </button>
                   <Bar pct={charts.shown ? callPct : 0} color="var(--brand-green)" label={`${r.callsDone}/${r.total} calls`} />
                   <Bar pct={charts.shown ? msgPct : 0} color="var(--brand-blue-soft)" label={`${r.msgsDone}/${r.total} msgs`} />
                 </div>
@@ -196,7 +206,21 @@ export function ReportsView({ data, initialDept }: { data: ReportsData; initialD
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-2.5">
                       <span className="h-[22px] w-2 rounded-[2px]" style={{ background: r.color }} />
-                      <span className="font-semibold" style={{ color: "var(--ink-900)" }}>{r.name}</span>
+                      <button
+                        onClick={() => setDrill({ id: r.id, name: r.name })}
+                        title="View calling & messaging summary"
+                        className="ll-press inline-flex cursor-pointer items-center gap-1.5"
+                      >
+                        <span
+                          className="font-semibold"
+                          style={{ color: "var(--brand-blue-deep)", borderBottom: "1px dashed var(--brand-blue-soft)" }}
+                        >
+                          {r.name}
+                        </span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-bold tabular-nums" style={{ color: "var(--brand-blue-deep)" }}>{r.total}</td>
