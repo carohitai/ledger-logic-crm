@@ -42,27 +42,91 @@ export function yeastarConfigured(): boolean {
   return Boolean(API_URL && CLIENT_ID && CLIENT_SECRET);
 }
 
+/**
+ * Fetch against the PBX with a timeout, surfacing network-level failures as a
+ * readable error naming the host and cause (DNS, refused, timeout, TLS…)
+ * instead of undici's bare "fetch failed".
+ */
+async function pbxFetch(pathAndQuery: string, init?: RequestInit): Promise<Record<string, unknown>> {
+  const url = `${base()}${pathAndQuery}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    const cause =
+      (e as { cause?: { code?: string; message?: string } }).cause?.code ??
+      (e as { cause?: { code?: string; message?: string } }).cause?.message ??
+      (e instanceof Error ? e.name === "TimeoutError" ? "timed out after 8s" : e.message : String(e));
+    throw new Error(
+      `Could not reach the PBX at ${new URL(url).host} (${cause}). Check YEASTAR_API_URL.`
+    );
+  }
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(`PBX returned a non-JSON response (HTTP ${res.status}) — is YEASTAR_API_URL pointing at /openapi/v1.0?`);
+  }
+}
+
 async function getToken(): Promise<string> {
   if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token;
   if (!API_URL || !CLIENT_ID || !CLIENT_SECRET) {
     throw new Error("Yeastar credentials are not configured");
   }
 
-  const res = await fetch(`${base()}/get_token`, {
+  const data = await pbxFetch(`/get_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: CLIENT_ID, password: CLIENT_SECRET }),
-    cache: "no-store",
   });
-  const data = await res.json();
   if (data.errcode !== 0 || !data.access_token) {
-    throw new Error(`Yeastar auth failed: ${data.errmsg ?? res.status}`);
+    throw new Error(`Yeastar auth failed: ${data.errmsg ?? "no access token returned"}`);
   }
   cached = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.access_token_expire_time ?? 1800) * 1000,
+    token: String(data.access_token),
+    expiresAt: Date.now() + (Number(data.access_token_expire_time ?? 1800)) * 1000,
   };
   return cached.token;
+}
+
+/**
+ * Config + connectivity health-check for diagnostics. Reports which env vars
+ * are present and whether a token can be fetched — never returns secrets.
+ */
+export async function probeYeastar(): Promise<{
+  configured: boolean;
+  apiHost: string | null;
+  env: Record<string, boolean | string | null>;
+  ok: boolean;
+  error?: string;
+}> {
+  const env = {
+    YEASTAR_API_URL: Boolean(process.env.YEASTAR_API_URL),
+    YEASTAR_PBX_DOMAIN: Boolean(process.env.YEASTAR_PBX_DOMAIN),
+    YEASTAR_PORT: process.env.YEASTAR_PORT ?? null,
+    YEASTAR_CLIENT_ID: Boolean(CLIENT_ID),
+    YEASTAR_CLIENT_SECRET: Boolean(CLIENT_SECRET),
+  };
+  let apiHost: string | null = null;
+  try {
+    apiHost = API_URL ? new URL(API_URL).host : null;
+  } catch {
+    return { configured: false, apiHost: API_URL ?? null, env, ok: false, error: "YEASTAR_API_URL is not a valid URL" };
+  }
+  if (!yeastarConfigured()) {
+    return { configured: false, apiHost, env, ok: false, error: "Missing YEASTAR_API_URL / YEASTAR_CLIENT_ID / YEASTAR_CLIENT_SECRET" };
+  }
+  try {
+    cached = null; // force a live round-trip
+    await getToken();
+    return { configured: true, apiHost, env, ok: true };
+  } catch (e) {
+    return { configured: true, apiHost, env, ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** Keep digits only; apply the configured outbound prefix. */
@@ -118,23 +182,21 @@ function toCdrRecord(r: Record<string, unknown>): CdrRecord {
 export async function recentCdr(sinceTimestamp: number): Promise<CdrRecord[]> {
   const token = await getToken();
   const pageSize = 100;
-  const first = await fetch(
-    `${base()}/cdr/search?access_token=${encodeURIComponent(token)}&page=1&page_size=1`,
-    { cache: "no-store" }
-  ).then((r) => r.json());
+  const first = await pbxFetch(
+    `/cdr/search?access_token=${encodeURIComponent(token)}&page=1&page_size=1`
+  );
   if (first.errcode !== 0) throw new Error(`CDR query failed: ${first.errmsg}`);
 
-  const total: number = first.total_number ?? 0;
+  const total = Number(first.total_number ?? 0);
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const out: CdrRecord[] = [];
 
   for (let page = lastPage; page >= 1; page--) {
-    const res = await fetch(
-      `${base()}/cdr/search?access_token=${encodeURIComponent(token)}&page=${page}&page_size=${pageSize}`,
-      { cache: "no-store" }
-    ).then((r) => r.json());
+    const res = await pbxFetch(
+      `/cdr/search?access_token=${encodeURIComponent(token)}&page=${page}&page_size=${pageSize}`
+    );
     if (res.errcode !== 0) throw new Error(`CDR query failed: ${res.errmsg}`);
-    const raw: Record<string, unknown>[] = res.data ?? res.cdr_list ?? [];
+    const raw = (res.data ?? res.cdr_list ?? []) as Record<string, unknown>[];
     const rows: CdrRecord[] = raw.map(toCdrRecord);
     out.push(...rows);
     const oldestOnPage = rows.length ? Math.min(...rows.map((r) => r.timestamp)) : 0;
@@ -149,13 +211,11 @@ export async function recentCdr(sinceTimestamp: number): Promise<CdrRecord[]> {
  */
 export async function dial(caller: string, callee: string): Promise<string> {
   const token = await getToken();
-  const res = await fetch(`${base()}/call/dial?access_token=${encodeURIComponent(token)}`, {
+  const data = await pbxFetch(`/call/dial?access_token=${encodeURIComponent(token)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ caller, callee }),
-    cache: "no-store",
   });
-  const data = await res.json();
   if (data.errcode !== 0) {
     // A stale cached token surfaces as an auth error — clear and retry once.
     if (cached && (data.errcode === 10003 || data.errcode === 10005)) {

@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { dial, normalizeNumber } from "@/lib/yeastar";
+import { dial, normalizeNumber, probeYeastar } from "@/lib/yeastar";
+
+// Diagnostics: signed-in users can GET this route to see whether the PBX
+// integration is configured and reachable (no secrets are returned).
+export async function GET() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+  const probe = await probeYeastar();
+  return NextResponse.json(probe, { status: probe.ok ? 200 : 503 });
+}
 
 // Click-to-call: originate a PBX call from the signed-in user's extension to a
 // client's phone. The caller extension is derived from the session (never the
@@ -66,6 +80,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, callId, extension: me.extension, callee });
   } catch (e) {
+    // Log the full failure so it's visible in Vercel runtime logs.
+    console.error("click-to-call failed:", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Call could not be placed" },
       { status: 502 }
