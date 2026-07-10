@@ -1,22 +1,50 @@
-// Server-only Yeastar P-Series Cloud PBX client for click-to-call.
+// Server-only Yeastar P-Series (Linkus) Cloud PBX client for click-to-call.
 // Credentials come from env and never reach the browser.
+//
+// Env vars (server-only):
+//   YEASTAR_API_URL       full OpenAPI base, e.g. https://<pbx-domain>/openapi/v1.0
+//   YEASTAR_CLIENT_ID     OpenAPI client ID (PBX → Integrations → OpenAPI)
+//   YEASTAR_CLIENT_SECRET OpenAPI client secret
+//   YEASTAR_DIAL_PREFIX   optional outbound prefix (e.g. "0" for mobiles)
+//
+// P-Series Cloud PBX serves the OpenAPI over HTTPS on port 443 at
+// `https://<domain>/openapi/v1.0` — do NOT append a management port like :8088,
+// which the cloud domain does not expose (that was why calls failed here).
 
-const DOMAIN = process.env.YEASTAR_PBX_DOMAIN;
-const PORT = process.env.YEASTAR_PORT ?? "8088";
 const CLIENT_ID = process.env.YEASTAR_CLIENT_ID;
 const CLIENT_SECRET = process.env.YEASTAR_CLIENT_SECRET;
 // Optional prefix the PBX outbound route needs (e.g. "0" for mobiles). Default none.
 const DIAL_PREFIX = process.env.YEASTAR_DIAL_PREFIX ?? "";
 
-const base = () => `https://${DOMAIN}:${PORT}/openapi/v1.0`;
+// Prefer a full base URL (as the working World School CRM uses). Fall back to
+// building one from a bare domain, honouring an explicit port only if given —
+// never defaulting to :8088.
+const API_URL =
+  process.env.YEASTAR_API_URL ??
+  (process.env.YEASTAR_PBX_DOMAIN
+    ? `https://${process.env.YEASTAR_PBX_DOMAIN}${
+        process.env.YEASTAR_PORT ? `:${process.env.YEASTAR_PORT}` : ""
+      }/openapi/v1.0`
+    : undefined);
+
+const base = () => {
+  if (!API_URL) {
+    throw new Error("Yeastar API URL is not configured (set YEASTAR_API_URL)");
+  }
+  return API_URL;
+};
 
 // Module-level token cache. Persists across requests on a warm serverless
 // instance; a cold start simply re-authenticates.
 let cached: { token: string; expiresAt: number } | null = null;
 
+export function yeastarConfigured(): boolean {
+  return Boolean(API_URL && CLIENT_ID && CLIENT_SECRET);
+}
+
 async function getToken(): Promise<string> {
   if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token;
-  if (!DOMAIN || !CLIENT_ID || !CLIENT_SECRET) {
+  if (!API_URL || !CLIENT_ID || !CLIENT_SECRET) {
     throw new Error("Yeastar credentials are not configured");
   }
 
@@ -51,9 +79,35 @@ export interface CdrRecord {
   disposition: string; // ANSWERED | NO ANSWER | BUSY | FAILED | VOICEMAIL
   call_from_number: string;
   call_to_number: string;
-  timestamp: number;
+  timestamp: number; // unix seconds
   duration?: number;
   ring_duration?: number;
+}
+
+/**
+ * Normalise one raw CDR row into `CdrRecord`. Yeastar P-Series returns fields
+ * like `id`, `time` ("YYYY-MM-DD HH:MM:SS", PBX local time / IST), `call_from`,
+ * `call_to`, `disposition`; older firmware uses slightly different names. We
+ * read every known alias so a valid record is produced regardless of version.
+ */
+function toCdrRecord(r: Record<string, unknown>): CdrRecord {
+  const timeStr = String(r.time ?? r.start_time ?? "");
+  const tsNumeric = Number(r.timestamp ?? r.time_stamp ?? 0);
+  const timestamp =
+    tsNumeric > 0
+      ? tsNumeric
+      : timeStr
+        ? Math.floor(Date.parse(`${timeStr.replace(" ", "T")}+05:30`) / 1000) || 0
+        : 0;
+  return {
+    call_id: String(r.call_id ?? r.id ?? r.uid ?? ""),
+    disposition: String(r.disposition ?? r.status ?? "").toUpperCase(),
+    call_from_number: String(r.call_from ?? r.call_from_number ?? r.src ?? ""),
+    call_to_number: String(r.call_to ?? r.call_to_number ?? r.dst ?? ""),
+    timestamp,
+    duration: Number(r.duration ?? 0),
+    ring_duration: Number(r.ring_duration ?? 0),
+  };
 }
 
 /**
@@ -80,7 +134,8 @@ export async function recentCdr(sinceTimestamp: number): Promise<CdrRecord[]> {
       { cache: "no-store" }
     ).then((r) => r.json());
     if (res.errcode !== 0) throw new Error(`CDR query failed: ${res.errmsg}`);
-    const rows: CdrRecord[] = res.data ?? [];
+    const raw: Record<string, unknown>[] = res.data ?? res.cdr_list ?? [];
+    const rows: CdrRecord[] = raw.map(toCdrRecord);
     out.push(...rows);
     const oldestOnPage = rows.length ? Math.min(...rows.map((r) => r.timestamp)) : 0;
     if (oldestOnPage < sinceTimestamp || page === 1) break;
@@ -109,5 +164,5 @@ export async function dial(caller: string, callee: string): Promise<string> {
     }
     throw new Error(`Dial failed: ${data.errmsg ?? "unknown error"}`);
   }
-  return data.call_id ?? "";
+  return String(data.call_id ?? data.id ?? "");
 }
