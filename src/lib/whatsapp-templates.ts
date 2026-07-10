@@ -1,17 +1,22 @@
-// WhatsApp compliance follow-up templates ({client} is filled per client).
-// Shared by the WhatsApp modal (preview / wa.me) and the send API.
+// WhatsApp compliance follow-up templates, with {token} variables filled per
+// client. Shared by the WhatsApp modal (preview / wa.me) and the send API.
 //
 // A template becomes sendable through the Nextel API once it is approved on
 // Nextel and its `nextel` mapping (template ID + ordered args) is filled in
 // here. Templates without a mapping can still be sent via wa.me.
 
-/** Client fields available to build template args (subset of the clients table). */
-export interface WaClientInfo {
-  name: string;
-  trade_name?: string | null;
-  pan?: string | null;
-  gstin?: string | null;
-  gst_frequency?: string | null;
+/**
+ * Values available to fill template {token}s. The send API builds these per
+ * client (incharges come from client_allotments); the modal preview only has
+ * the client name, so unfilled tokens render literally there.
+ */
+export interface WaTemplateValues {
+  client: string;
+  /** Month the return is for, e.g. "June 2026". */
+  period?: string;
+  partner_incharge?: string;
+  accounts_incharge?: string;
+  gst_incharge?: string;
 }
 
 export interface WaNextelMapping {
@@ -20,7 +25,7 @@ export interface WaNextelMapping {
   /** Nextel payload `type` for this template. */
   type: "buttonTemplate" | "textTemplate";
   /** Ordered values for {{1}}..{{n}} in the approved template. */
-  args: (client: WaClientInfo) => string[];
+  args: (values: WaTemplateValues) => string[];
 }
 
 export interface WaTemplate {
@@ -31,15 +36,47 @@ export interface WaTemplate {
   nextel: WaNextelMapping | null;
 }
 
+// Text mirrors the approved "gst_return" template on Nextel verbatim
+// ({{1}}..{{5}} → tokens); keep the two in sync so previews and the
+// whatsapp_messages log match what clients actually receive.
+const GST_REMINDER_TEXT = `Dear {client}
+
+Kindly Submit your following documents data for GST return for the month period {period}
+
+1. Sales Bills / RA Bills
+2. Purchase Bills
+3. Bank Statements with proper remark of every transaction
+4. Loan Statements
+5. Attendant Muster / Salary Paysheet / Labour Payment Advice
+6. PF / ESIC – Challan, ECR, Payment Receipt
+7. GSTR 7A report Only for Contractors
+8. Cutting Details for Contractors
+9. Suppliers Ledger
+10. Credit Card Statement
+
+Following are:
+Your Partner Incharge is {partner_incharge}
+Your Accounts Incharge is {accounts_incharge}
+Your GST Incharge is {gst_incharge}
+
+In case of delay, a late fee will be payable as per rules. Rs. 20/- for NIL returns per day. Rs. 50/- for other than NIL returns per day. Note -Kindly submit all bills before the 5th. Any bills received after this date may result in delays in filing the GSTR-1 return, as we may not have enough time to properly analyze your documents. Additionally, the GST website tends to slow down near the deadline, further complicating the process.`;
+
 export const WA_TEMPLATES: WaTemplate[] = [
   {
     key: "gst_reminder",
     label: "GST filing reminder",
-    text: "Dear {client}, a gentle reminder from Kolte & Associates LLP — your GST return for the current period is due shortly. Please share any pending details so we can file on time.",
-    // Approved on Nextel as "gst_return" (buttonTemplate, 5 args). Mapping stays
-    // off until the approved text + arg order ({{1}}..{{5}}) are confirmed, so
-    // we don't send a garbled message.
-    nextel: null,
+    text: GST_REMINDER_TEXT,
+    nextel: {
+      templateId: "gst_return",
+      type: "buttonTemplate",
+      args: (v) => [
+        v.client,
+        v.period ?? previousMonthLabel(),
+        v.partner_incharge ?? "-",
+        v.accounts_incharge ?? "-",
+        v.gst_incharge ?? "-",
+      ],
+    },
   },
   {
     key: "it_reminder",
@@ -66,11 +103,20 @@ export const WA_TEMPLATES: WaTemplate[] = [
     nextel: {
       templateId: "call_back_work",
       type: "buttonTemplate",
-      args: (client) => [client.name],
+      args: (v) => [v.client],
     },
   },
 ];
 
-export function renderTemplate(t: WaTemplate, clientName: string): string {
-  return t.text.replace("{client}", clientName);
+/** Fills known {token}s; unknown or missing ones are left literally in place. */
+export function renderTemplate(t: WaTemplate, values: WaTemplateValues): string {
+  const map = values as unknown as Record<string, string | undefined>;
+  return t.text.replace(/\{(\w+)\}/g, (token, key) => map[key] ?? token);
+}
+
+/** Previous calendar month in IST, e.g. "June 2026" — the month a GST return filed now is for. */
+export function previousMonthLabel(now = new Date()): string {
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const prev = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 1, 1));
+  return prev.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 }

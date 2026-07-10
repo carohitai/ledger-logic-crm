@@ -97,7 +97,7 @@ export async function GET(request: Request) {
       let whatsappError: string | null = null;
       if (whatsappConfigured() && client?.phone && log.attempt === 1) {
         try {
-          await sendWhatsAppTemplate(client.phone, CALLBACK, CALLBACK.args({ name: client.name }));
+          await sendWhatsAppTemplate(client.phone, CALLBACK, CALLBACK.args({ client: client.name }));
           whatsappSent = true;
           summary.whatsapp++;
           await db.from("whatsapp_messages").insert({

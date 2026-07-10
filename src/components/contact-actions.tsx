@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Spinner } from "./spinner";
-import { WA_TEMPLATES, renderTemplate } from "@/lib/whatsapp-templates";
+import { WA_TEMPLATES, previousMonthLabel, renderTemplate } from "@/lib/whatsapp-templates";
 
 // 28px inline contact actions used in client tables (design: Admin interface
 // redesign handoff) — click-to-call via Linkus and WhatsApp via Nextel.
@@ -110,7 +110,9 @@ function WhatsAppModal({ client, onClose }: { client: ContactClient; onClose: ()
   const [error, setError] = useState<string | null>(null);
 
   const template = WA_TEMPLATES[selected];
-  const preview = renderTemplate(template, client.name);
+  // Preview fills what the browser knows; incharge names are resolved
+  // server-side at send time, so their tokens render literally here.
+  const preview = renderTemplate(template, { client: client.name, period: previousMonthLabel() });
   const digits = "91" + (client.phone ?? "").replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
 
   async function sendViaNextel() {
@@ -238,7 +240,7 @@ function WhatsAppModal({ client, onClose }: { client: ContactClient; onClose: ()
             <div className="mb-1.5 text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--ink-400)" }}>
               Message preview
             </div>
-            <p className="m-0 text-[13px] leading-relaxed" style={{ color: "var(--ink-700)" }}>
+            <p className="m-0 whitespace-pre-line text-[13px] leading-relaxed" style={{ color: "var(--ink-700)" }}>
               {preview}
             </p>
           </div>
