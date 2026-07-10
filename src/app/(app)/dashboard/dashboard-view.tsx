@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AppLink } from "@/components/nav-progress";
 import { SubmitButton } from "@/components/button";
+import { StaffSummaryModal } from "@/components/staff-summary-modal";
 
 export interface StaffStat {
   id: string;
@@ -150,6 +151,7 @@ export function DashboardView({
   const [statP, setStatP] = useState(0);
   const [chartP, setChartP] = useState(0);
   const [barsOn, setBarsOn] = useState(false);
+  const [drill, setDrill] = useState<{ id: string; name: string } | null>(null);
   const statsRef = useRef<HTMLElement>(null);
   const chartsRef = useRef<HTMLElement>(null);
 
@@ -207,6 +209,9 @@ export function DashboardView({
 
   return (
     <div className="flex flex-col gap-11">
+      {drill && (
+        <StaffSummaryModal staffId={drill.id} staffName={drill.name} onClose={() => setDrill(null)} />
+      )}
       {/* Hero */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
@@ -296,7 +301,14 @@ export function DashboardView({
                 {rows.map((r) => (
                   <li key={r.s.id} className="flex items-center gap-2 text-xs" style={{ color: "var(--ink-700)" }}>
                     <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: COLORS[r.i % COLORS.length] }} />
-                    <span className="flex-1 truncate">{r.s.name}</span>
+                    <button
+                      onClick={() => setDrill({ id: r.s.id, name: r.s.name })}
+                      title="View calling & messaging summary"
+                      className="flex-1 cursor-pointer truncate text-left transition-colors hover:!text-[var(--brand-blue)] hover:underline"
+                      style={{ color: "var(--ink-700)" }}
+                    >
+                      {r.s.name}
+                    </button>
                     <span className="font-semibold tabular-nums" style={{ color: "var(--ink-900)" }}>
                       {r.assigned}
                     </span>
@@ -381,7 +393,21 @@ export function DashboardView({
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-2.5">
                         <span className="h-[22px] w-2 rounded-[2px]" style={{ background: COLORS[r.i % COLORS.length] }} />
-                        <span className="font-semibold" style={{ color: "var(--ink-900)" }}>{r.s.name}</span>
+                        <button
+                          onClick={() => setDrill({ id: r.s.id, name: r.s.name })}
+                          title="View calling & messaging summary"
+                          className="ll-press inline-flex cursor-pointer items-center gap-1.5"
+                        >
+                          <span
+                            className="font-semibold"
+                            style={{ color: "var(--brand-blue-deep)", borderBottom: "1px dashed var(--brand-blue-soft)" }}
+                          >
+                            {r.s.name}
+                          </span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                        </button>
                         {r.s.ext && (
                           <span className="text-[11px]" style={{ color: "var(--ink-400)" }}>ext {r.s.ext}</span>
                         )}

@@ -118,6 +118,7 @@ body {
   position: absolute;
   inset: 0;
   width: 100%;
+  overflow: hidden;
   transform-origin: left center;
   background: linear-gradient(
     90deg,
@@ -125,7 +126,35 @@ body {
     var(--brand-blue-soft) 40%,
     var(--brand-green) 100%
   );
+  box-shadow: 0 0 10px 1px rgba(148, 192, 71, 0.65);
   animation: ll-topbar-sweep 1150ms var(--ease-emphasized) infinite;
+}
+/* Shimmer highlight riding the bar (design: admin interface redesign). */
+.ll-topbar__bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: ll-shimmer 1s linear infinite;
+}
+@keyframes ll-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+@keyframes ll-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 @keyframes ll-topbar-sweep {
   0% {
@@ -159,6 +188,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ll-spinner,
   .ll-topbar__bar,
+  .ll-topbar__bar::after,
   .ll-rise {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;

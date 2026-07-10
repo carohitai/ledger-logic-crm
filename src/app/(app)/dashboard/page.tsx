@@ -137,6 +137,12 @@ export default async function DashboardPage() {
   const withoutActivity = (myClients ?? []).map((c) => c.id).filter((id) => !latestByClient.has(id));
   const ordered = [...withActivity, ...withoutActivity].slice(0, 8);
 
+  // Phone numbers for the Mobile column (click-to-call / WhatsApp actions).
+  const { data: phones } = ordered.length
+    ? await supabase.from("clients").select("id, phone").in("id", ordered)
+    : { data: [] as { id: string; phone: string | null }[] };
+  const phoneById = new Map((phones ?? []).map((p) => [p.id, p.phone]));
+
   const followUps: FollowUp[] = ordered.map((id) => {
     const c = clientById.get(id)!;
     const act = latestByClient.get(id);
@@ -151,6 +157,7 @@ export default async function DashboardPage() {
       client: c.name,
       pan: c.pan,
       cat: c.category,
+      phone: phoneById.get(id) ?? null,
       status: status.label,
       pillBg: status.bg,
       pillFg: status.fg,
