@@ -39,6 +39,8 @@ export function UserDashboardView({
   statCalls,
   statCallback,
   statWa,
+  contactedCalls,
+  contactedMsgs,
   coverage,
   deptCounts,
   followUps,
@@ -50,6 +52,10 @@ export function UserDashboardView({
   statCalls: number;
   statCallback: number;
   statWa: number;
+  /** distinct allotted clients contacted via calls */
+  contactedCalls: number;
+  /** distinct allotted clients contacted via messages */
+  contactedMsgs: number;
   coverage: number;
   deptCounts: Record<"gst" | "it" | "acc" | "bill", number>;
   followUps: FollowUp[];
@@ -84,10 +90,12 @@ export function UserDashboardView({
         </p>
       </div>
 
-      <section ref={stats.ref} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <section ref={stats.ref} className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard value={Math.round(statCalls * statP)} label="Calls placed today" />
         <StatCard value={Math.round(statCallback * statP)} label="Awaiting callback" />
         <StatCard value={Math.round(statWa * statP)} label="WhatsApp sent" />
+        <StatCard value={Math.round(contactedCalls * statP)} label="Clients contacted — calls" color="var(--brand-blue-deep)" />
+        <StatCard value={Math.round(contactedMsgs * statP)} label="Clients contacted — messages" color="var(--brand-blue-deep)" />
         <StatCard value={`${Math.round(coverage * statP)}%`} label="My contact coverage" color="var(--brand-green-deep)" />
       </section>
 
