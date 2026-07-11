@@ -108,6 +108,109 @@ export async function downloadClientList(): Promise<{
   return { name: meta.name, buf: await res.arrayBuffer() };
 }
 
+async function graphPatch(url: string, token: string, body: unknown): Promise<void> {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Graph request failed (${res.status}): ${await res.text()}`);
+  }
+}
+
+const cell = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim();
+const upperCell = (v: unknown) => cell(v).toUpperCase();
+
+/** 0-based column index → A1 letters (0 → A, 26 → AA). */
+function colLetter(idx: number): string {
+  let n = idx + 1;
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function letterToIdx(letters: string): number {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+/**
+ * Writes edited client fields back into the linked master workbook so the
+ * sheet stays in step with in-app edits. The row is located by the client's
+ * PRE-EDIT identity (PAN, else name + trade name — the same keys the import
+ * uses), and `updates` maps sheet headers to new cell values.
+ *
+ * Requires the Entra app to have write access to the file (Sites.ReadWrite.All,
+ * or a "write" role grant on Sites.Selected); a 403 here means it only has read.
+ */
+export async function updateClientListRow(
+  match: { pan: string | null; name: string; tradeName: string | null },
+  updates: Record<string, string>
+): Promise<{ updatedCells: number }> {
+  const token = await getToken();
+
+  const wsRes = await graphGet(`${itemUrl()}/workbook/worksheets?$select=id,name`, token);
+  const sheets = ((await wsRes.json()) as { value: { id: string; name: string }[] }).value;
+  if (!sheets?.length) throw new Error("Workbook has no worksheets");
+  // The import reads the first sheet; write back to the same one.
+  const base = `${itemUrl()}/workbook/worksheets/${encodeURIComponent(sheets[0].id)}`;
+
+  const urRes = await graphGet(`${base}/usedRange?$select=address,values`, token);
+  const ur = (await urRes.json()) as { address: string; values: unknown[][] };
+  const addr = ur.address.match(/!\$?([A-Z]+)\$?(\d+)/);
+  if (!addr || !ur.values?.length) throw new Error("Could not read the sheet's used range");
+  const startCol = letterToIdx(addr[1]);
+  const startRow = Number(addr[2]);
+
+  const headerIdx = new Map<string, number>();
+  ur.values[0].forEach((h, i) => {
+    const key = cell(h);
+    if (key) headerIdx.set(key.toUpperCase(), i);
+  });
+  const col = (header: string) => headerIdx.get(header.toUpperCase());
+
+  const panCol = col("PAN");
+  const nameCol = col("Name of Client");
+  const tradeCol = col("TRADE NAME");
+  if (nameCol === undefined) throw new Error(`Sheet is missing a "Name of Client" column`);
+
+  const hits: number[] = [];
+  for (let i = 1; i < ur.values.length; i++) {
+    const row = ur.values[i];
+    const found = match.pan
+      ? panCol !== undefined && upperCell(row[panCol]) === match.pan.toUpperCase()
+      : upperCell(row[nameCol]) === match.name.toUpperCase().replace(/\s+/g, " ").trim() &&
+        (tradeCol === undefined || upperCell(row[tradeCol]) === (match.tradeName ?? "").toUpperCase().replace(/\s+/g, " ").trim());
+    if (found) hits.push(i);
+  }
+  const key = match.pan ? `PAN ${match.pan}` : `name "${match.name}"`;
+  if (hits.length === 0) throw new Error(`No sheet row matches ${key}`);
+  if (hits.length > 1) throw new Error(`${hits.length} sheet rows match ${key} — fix the sheet, then re-import`);
+
+  const rowIdx = hits[0];
+  const row = ur.values[rowIdx];
+  let updatedCells = 0;
+  for (const [header, value] of Object.entries(updates)) {
+    const c = col(header);
+    if (c === undefined) continue; // column absent from the sheet — nothing to write
+    if (cell(row[c]) === cell(value)) continue;
+    const address = `${colLetter(startCol + c)}${startRow + rowIdx}`;
+    await graphPatch(`${base}/range(address='${address}')`, token, { values: [[value]] });
+    updatedCells++;
+  }
+  return { updatedCells };
+}
+
 export type LinkStatus =
   | { configured: false }
   | { configured: true; error: string }

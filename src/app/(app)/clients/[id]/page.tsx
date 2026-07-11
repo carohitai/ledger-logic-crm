@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/button";
 import { BackLink } from "@/components/back-link";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { WA_TEMPLATES } from "@/lib/whatsapp-templates";
+import { ClientDetailsCard } from "./details-card";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
 
@@ -119,17 +120,6 @@ export default async function ClientDetailPage({
     }
     revalidatePath(`/clients/${id}`);
   }
-
-  const info: [string, string | null][] = [
-    ["Constitution", client.constitution],
-    ["Trade Name", client.trade_name],
-    ["GSTIN", client.gstin],
-    ["GST Status", client.gst_status],
-    ["Books", client.books],
-    ["IT Category", client.it_category],
-    ["GST Frequency", client.gst_frequency],
-    ["Email", client.email],
-  ];
 
   const contact = { id: client.id, name: client.name, phone: client.phone };
   const templateLabel = (tid: string | null) =>
@@ -300,21 +290,7 @@ export default async function ClientDetailPage({
 
       {/* Details + admin allotment editing */}
       <div className="grid items-start gap-4 md:grid-cols-2">
-        <section className="px-6 py-[22px]" style={cardStyle}>
-          <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
-            Details
-          </h3>
-          <dl className="m-0 space-y-2.5 text-[13px]">
-            {info.map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-4">
-                <dt style={{ color: "var(--ink-500)" }}>{label}</dt>
-                <dd className="m-0 text-right font-semibold" style={{ color: "var(--ink-900)" }}>
-                  {value ?? "—"}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+        <ClientDetailsCard client={client} canEdit={isAdmin} />
 
         {isAdmin && staffList && (
           <section className="px-6 py-[22px]" style={cardStyle}>
