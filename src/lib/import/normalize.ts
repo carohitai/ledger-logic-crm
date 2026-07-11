@@ -38,7 +38,7 @@ const NON_STAFF = new Set([
   "LEFT",
 ]);
 
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
 export interface ClientFields {
   name: string;
