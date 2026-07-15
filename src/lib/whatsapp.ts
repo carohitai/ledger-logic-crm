@@ -17,12 +17,20 @@ export function toWhatsAppNumber(raw: string): string {
   return n;
 }
 
+/** The Nextel-side identity of an approved template (see whatsapp-templates.ts). */
+export interface NextelTemplateRef {
+  templateId: string;
+  language?: string;
+  type?: "template" | "buttonTemplate";
+}
+
 /**
- * Sends the approved "call_back_work" button template: language "en", one arg
- * (client name). `sender_phone` in Nextel's schema is the RECIPIENT's number.
+ * Sends any approved Nextel template. `sender_phone` in Nextel's schema is
+ * the RECIPIENT's number; `templateArgs` are the template's positional args.
  */
-export async function sendCallbackTemplate(
+export async function sendWhatsAppTemplate(
   phone: string,
+  template: NextelTemplateRef,
   templateArgs: string[]
 ): Promise<void> {
   if (!SEND_URL || !API_KEY) {
@@ -38,9 +46,9 @@ export async function sendCallbackTemplate(
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      type: "buttonTemplate",
-      templateId: TEMPLATE_ID,
-      templateLanguage: TEMPLATE_LANG,
+      type: template.type ?? "template",
+      templateId: template.templateId,
+      templateLanguage: template.language ?? "en",
       sender_phone: to,
       templateArgs,
     }),
@@ -62,4 +70,19 @@ export async function sendCallbackTemplate(
     if (e instanceof SyntaxError) return; // non-JSON success body
     throw e;
   }
+}
+
+/**
+ * Sends the approved "call_back_work" button template: language "en", one arg
+ * (client name). Template id/language remain overridable via env for this path.
+ */
+export async function sendCallbackTemplate(
+  phone: string,
+  templateArgs: string[]
+): Promise<void> {
+  return sendWhatsAppTemplate(
+    phone,
+    { templateId: TEMPLATE_ID, language: TEMPLATE_LANG, type: "buttonTemplate" },
+    templateArgs
+  );
 }
