@@ -36,11 +36,12 @@ export const WA_TEMPLATES: WaTemplate[] = [
     key: "gst_reminder",
     label: "GST filing reminder",
     text: "Dear {client}, a gentle reminder from Kolte & Associates LLP — your GST return for {period} is due. Please submit your sales and purchase details before the 5th so we can file on time. Partner incharge: {partner_incharge} · Accounts: {accounts_incharge} · GST: {gst_incharge}.",
-    // Maps to the approved gst_return template on Nextel.
+    // Maps to the approved gst_return button template on Nextel:
+    // {{1}} client, {{2}} return period, {{3}}-{{5}} partner/accounts/GST incharge.
     nextel: {
       templateId: "gst_return",
       language: "en",
-      type: "template",
+      type: "buttonTemplate",
       args: (v) => [
         v.client,
         v.period ?? "-",
