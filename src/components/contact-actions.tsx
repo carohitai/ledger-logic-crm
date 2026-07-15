@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Spinner } from "./spinner";
-import { WA_TEMPLATES, renderTemplate } from "@/lib/whatsapp-templates";
+import { WA_TEMPLATES, currentMonthLabel, renderTemplate } from "@/lib/whatsapp-templates";
 
 // 28px inline contact actions used in client tables (design: Admin interface
 // redesign handoff) — click-to-call via Linkus and WhatsApp via Nextel.
@@ -110,7 +110,9 @@ function WhatsAppModal({ client, onClose }: { client: ContactClient; onClose: ()
   const [error, setError] = useState<string | null>(null);
 
   const template = WA_TEMPLATES[selected];
-  const preview = renderTemplate(template, client.name);
+  // Preview approximation — the send API fills the real period (monthly vs
+  // quarterly) and incharge names server-side.
+  const preview = renderTemplate(template, { client: client.name, period: currentMonthLabel() });
   const digits = "91" + (client.phone ?? "").replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
 
   async function sendViaNextel() {
