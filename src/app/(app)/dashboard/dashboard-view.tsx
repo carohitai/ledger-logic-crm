@@ -6,16 +6,26 @@ import { AppLink } from "@/components/nav-progress";
 import { SubmitButton } from "@/components/button";
 import { StaffSummaryModal } from "@/components/staff-summary-modal";
 
+export interface DeptCounts {
+  gst: number;
+  it: number;
+  acc: number;
+  bill: number;
+}
+
 export interface StaffStat {
   id: string;
   name: string;
   ext: string | null;
+  /** distinct clients allotted to this staff across the four departments */
   assigned: number;
   gst: number;
   it: number;
   acc: number;
   bill: number;
+  /** distinct allotted clients this staff has called or messaged */
   contacted: number;
+  contactedDept: DeptCounts;
   alerts: number;
   unacked: number;
 }
@@ -134,6 +144,9 @@ export function DashboardView({
   statCalls,
   statCallback,
   statWa,
+  deptClients,
+  totalClients,
+  myContact,
   isAdmin,
   ack,
 }: {
@@ -144,6 +157,12 @@ export function DashboardView({
   statCalls: number;
   statCallback: number;
   statWa: number;
+  /** distinct clients per department, firm-wide */
+  deptClients: DeptCounts;
+  /** distinct clients with any department allotment */
+  totalClients: number;
+  /** viewer's partner-incharge clients contacted by the viewer, per channel */
+  myContact: { total: number; called: number; messaged: number };
   isAdmin: boolean;
   ack: (alertId: string) => Promise<void>;
 }) {
@@ -185,8 +204,7 @@ export function DashboardView({
   }, []);
 
   const assignedOf = (s: StaffStat) => (dept === "all" ? s.assigned : s[dept]);
-  const contactedOf = (s: StaffStat) =>
-    dept === "all" ? s.contacted : s.assigned ? Math.round(s.contacted * (s[dept] / s.assigned)) : 0;
+  const contactedOf = (s: StaffStat) => (dept === "all" ? s.contacted : s.contactedDept[dept]);
 
   const rows = stats
     .map((s, i) => ({ s, i, assigned: assignedOf(s), contacted: contactedOf(s) }))
@@ -197,8 +215,12 @@ export function DashboardView({
   const totalContacted = rows.reduce((n, r) => n + r.contacted, 0);
   const coverage = totalAssigned ? Math.round((totalContacted / totalAssigned) * 100) : 0;
 
+  // Distinct clients in the current scope — allotment rows can overlap across
+  // staff and departments, so this is the honest headline figure.
+  const clientsInScope = dept === "all" ? totalClients : deptClients[dept];
+
   const staffSegs = rows.map((r) => ({ value: r.assigned, color: COLORS[r.i % COLORS.length] }));
-  const deptTotals = DEPTS.map((d) => stats.reduce((n, s) => n + s[d.key], 0));
+  const deptTotals = DEPTS.map((d) => deptClients[d.key]);
   const deptSegs = DEPTS.map((d, j) => ({ value: deptTotals[j], color: d.color }));
   const covSegs = [
     { value: totalContacted, color: "#94C047" },
@@ -257,11 +279,13 @@ export function DashboardView({
       </div>
 
       {/* Stat cards */}
-      <section ref={statsRef} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <section ref={statsRef} className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         {[
           { v: stat(statCalls), label: "Calls placed today", color: "var(--ink-900)" },
           { v: stat(statCallback), label: "Awaiting callback", color: "var(--ink-900)" },
           { v: stat(statWa), label: "WhatsApp sent", color: "var(--ink-900)" },
+          { v: `${stat(myContact.called)}/${myContact.total}`, label: "My partner clients called", color: "var(--brand-blue-deep)" },
+          { v: `${stat(myContact.messaged)}/${myContact.total}`, label: "My partner clients messaged", color: "var(--brand-blue-deep)" },
           { v: `${stat(coverage)}%`, label: "Contact coverage", color: "var(--brand-green-deep)" },
         ].map((c) => (
           <div
@@ -288,42 +312,44 @@ export function DashboardView({
         >
           Allotment at a glance
         </h2>
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
-          <div className="min-w-0 p-6" style={card}>
-            <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
-              Clients allotted per staff member
-            </h3>
-            <div className="flex flex-wrap items-center gap-6">
-              <div className="shrink-0">
-                <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(totalAssigned)} centerBottom="CLIENTS" progress={chartP} />
+        <div className={`grid gap-4 ${dept === "all" ? "lg:grid-cols-2" : "lg:grid-cols-[1.4fr_1fr_1fr]"}`}>
+          {dept !== "all" && (
+            <div className="min-w-0 p-6" style={card}>
+              <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+                Clients allotted per staff member — {DEPT_LABELS[dept]}
+              </h3>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="shrink-0">
+                  <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(clientsInScope)} centerBottom="CLIENTS" progress={chartP} />
+                </div>
+                <ul className="grid min-w-[200px] flex-1 grid-cols-2 gap-x-4 gap-y-2">
+                  {rows.map((r) => (
+                    <li key={r.s.id} className="flex items-center gap-2 text-xs" style={{ color: "var(--ink-700)" }}>
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: COLORS[r.i % COLORS.length] }} />
+                      <button
+                        onClick={() => setDrill({ id: r.s.id, name: r.s.name })}
+                        title="View calling & messaging summary"
+                        className="flex-1 cursor-pointer truncate text-left transition-colors hover:!text-[var(--brand-blue)] hover:underline"
+                        style={{ color: "var(--ink-700)" }}
+                      >
+                        {r.s.name}
+                      </button>
+                      <span className="font-semibold tabular-nums" style={{ color: "var(--ink-900)" }}>
+                        {r.assigned}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="grid min-w-[200px] flex-1 grid-cols-2 gap-x-4 gap-y-2">
-                {rows.map((r) => (
-                  <li key={r.s.id} className="flex items-center gap-2 text-xs" style={{ color: "var(--ink-700)" }}>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: COLORS[r.i % COLORS.length] }} />
-                    <button
-                      onClick={() => setDrill({ id: r.s.id, name: r.s.name })}
-                      title="View calling & messaging summary"
-                      className="flex-1 cursor-pointer truncate text-left transition-colors hover:!text-[var(--brand-blue)] hover:underline"
-                      style={{ color: "var(--ink-700)" }}
-                    >
-                      {r.s.name}
-                    </button>
-                    <span className="font-semibold tabular-nums" style={{ color: "var(--ink-900)" }}>
-                      {r.assigned}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             </div>
-          </div>
+          )}
 
           <div className="min-w-0 p-6" style={card}>
             <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
-              Department split
+              Department split — clients per department
             </h3>
             <div className="flex flex-col items-center gap-4">
-              <Donut segments={deptSegs} size={160} thickness={44} progress={chartP} />
+              <Donut segments={deptSegs} size={160} thickness={44} centerTop={String(totalClients)} centerBottom="CLIENTS" progress={chartP} />
               <ul className="grid w-full grid-cols-2 gap-x-3.5 gap-y-1.5">
                 {DEPTS.map((d, j) => (
                   <li key={d.key} className="flex items-center gap-2 text-xs" style={{ color: "var(--ink-700)" }}>
@@ -355,6 +381,54 @@ export function DashboardView({
             </div>
           </div>
         </div>
+
+        {/* Staff-wise distribution inside every department */}
+        {dept === "all" && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {DEPTS.map((d, j) => {
+              const deptRows = stats
+                .map((s, i) => ({ s, i, count: s[d.key] }))
+                .filter((r) => r.count > 0)
+                .sort((a, b) => b.count - a.count);
+              return (
+                <div key={d.key} className="min-w-0 p-6" style={card}>
+                  <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+                    <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: d.color }} />
+                    {d.name} — staff-wise split
+                  </h3>
+                  <div className="flex flex-col items-center gap-4">
+                    <Donut
+                      segments={deptRows.map((r) => ({ value: r.count, color: COLORS[r.i % COLORS.length] }))}
+                      size={150}
+                      thickness={24}
+                      centerTop={String(deptTotals[j])}
+                      centerBottom="CLIENTS"
+                      progress={chartP}
+                    />
+                    <ul className="flex max-h-40 w-full flex-col gap-1.5 overflow-y-auto pr-1">
+                      {deptRows.map((r) => (
+                        <li key={r.s.id} className="flex items-center gap-2 text-xs" style={{ color: "var(--ink-700)" }}>
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: COLORS[r.i % COLORS.length] }} />
+                          <button
+                            onClick={() => setDrill({ id: r.s.id, name: r.s.name })}
+                            title="View calling & messaging summary"
+                            className="flex-1 cursor-pointer truncate text-left transition-colors hover:!text-[var(--brand-blue)] hover:underline"
+                            style={{ color: "var(--ink-700)" }}
+                          >
+                            {r.s.name}
+                          </button>
+                          <span className="font-semibold tabular-nums" style={{ color: "var(--ink-900)" }}>
+                            {r.count}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Staff table */}
@@ -367,7 +441,7 @@ export function DashboardView({
             Staff allotment — {DEPT_LABELS[dept]}
           </h2>
           <span className="text-xs" style={{ color: "var(--ink-400)" }}>
-            {totalAssigned} clients · sorted by allotment
+            {clientsInScope} distinct clients · sorted by allotment
           </span>
         </div>
         <div className="overflow-x-auto" style={{ ...card, overflow: "hidden" }}>
