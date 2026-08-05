@@ -134,6 +134,7 @@ export function DashboardView({
   statCalls,
   statCallback,
   statWa,
+  clientsTotal,
   isAdmin,
   ack,
 }: {
@@ -144,6 +145,8 @@ export function DashboardView({
   statCalls: number;
   statCallback: number;
   statWa: number;
+  /** Distinct active clients — summing per-staff counts would count a client once per incharge. */
+  clientsTotal: number;
   isAdmin: boolean;
   ack: (alertId: string) => Promise<void>;
 }) {
@@ -194,6 +197,10 @@ export function DashboardView({
     .sort((a, b) => b.assigned - a.assigned);
 
   const totalAssigned = rows.reduce((n, r) => n + r.assigned, 0);
+  // In "all" mode, summing per-staff distinct counts multi-counts clients that
+  // have several incharges — show the true distinct total instead. Per-dept
+  // sums are already distinct (one incharge per role per client).
+  const displayClients = dept === "all" ? clientsTotal : totalAssigned;
   const totalContacted = rows.reduce((n, r) => n + r.contacted, 0);
   const coverage = totalAssigned ? Math.round((totalContacted / totalAssigned) * 100) : 0;
 
@@ -295,7 +302,7 @@ export function DashboardView({
             </h3>
             <div className="flex flex-wrap items-center gap-6">
               <div className="shrink-0">
-                <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(totalAssigned)} centerBottom="CLIENTS" progress={chartP} />
+                <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(displayClients)} centerBottom="CLIENTS" progress={chartP} />
               </div>
               <ul className="grid min-w-[200px] flex-1 grid-cols-2 gap-x-4 gap-y-2">
                 {rows.map((r) => (
@@ -367,7 +374,7 @@ export function DashboardView({
             Staff allotment — {DEPT_LABELS[dept]}
           </h2>
           <span className="text-xs" style={{ color: "var(--ink-400)" }}>
-            {totalAssigned} clients · sorted by allotment
+            {displayClients} clients · sorted by allotment
           </span>
         </div>
         <div className="overflow-x-auto" style={{ ...card, overflow: "hidden" }}>

@@ -54,13 +54,14 @@ export default async function DashboardPage() {
 
   // ---------------- Admin / partner: firm-wide team dashboard ----------------
   if (isAdmin) {
-    const [{ data: statsRaw }, statCalls, statCallback, statWa, { data: alertsRaw }] =
+    const [{ data: statsRaw }, statCalls, statCallback, statWa, { data: alertsRaw }, clientsTotal] =
       await Promise.all([
         supabase.from("dashboard_staff_stats").select("*"),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).gte("placed_at", today.toISOString()).then((r) => r.count ?? 0),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).eq("status", "scheduled").then((r) => r.count ?? 0),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).eq("whatsapp_sent", true).then((r) => r.count ?? 0),
         supabase.from("alerts").select("id, client_id, type, message, created_at, acknowledged_at").eq("staff_id", me?.id ?? "").order("created_at", { ascending: false }).limit(50),
+        supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "active").then((r) => r.count ?? 0),
       ]);
 
     const stats: StaffStat[] = (statsRaw ?? []).map((s) => ({
@@ -95,6 +96,7 @@ export default async function DashboardPage() {
         statCalls={statCalls}
         statCallback={statCallback}
         statWa={statWa}
+        clientsTotal={clientsTotal}
         isAdmin
         ack={acknowledge}
       />
