@@ -54,7 +54,7 @@ export const WA_TEMPLATES: WaTemplate[] = [
   {
     key: "it_reminder",
     label: "Income Tax return reminder",
-    text: "Dear {client}, your Income Tax return filing is pending. Kindly share the required documents at your earliest convenience so we can proceed.",
+    text: "Dear {client}, your Income Tax return filing is pending. The due date for filing is 31st August. Filing after the due date attracts a late filing fee of up to Rs. 5,000 u/s 234F (Rs. 1,000 where total income is up to Rs. 5 lakh) and interest at 1% per month on the tax payable u/s 234A. Kindly share the required documents at your earliest convenience so we can file well in time. Regards, Kolte & Associates LLP.",
     nextel: null,
   },
   {
