@@ -22,6 +22,18 @@ export interface ReportStaff {
 
 export type DeptKey = "gst" | "it" | "acc" | "bill";
 
+export interface FilingBucket {
+  label: string;
+  count: number;
+}
+
+/** Status tallies for the annual-filing section, most common bucket first. */
+export interface FilingSummary {
+  itr: FilingBucket[];
+  gstr9: FilingBucket[];
+  gstr9c: FilingBucket[];
+}
+
 export interface ReportsData {
   gst: ReportStaff[];
   it: ReportStaff[];
@@ -48,13 +60,95 @@ const GRADE_COLOR: Record<string, string> = {
 };
 const GRADE_ORDER = ["A++", "A+", "A", "B", "C", "D", "E", "NA"];
 
-export function ReportsView({ data, initialDept }: { data: ReportsData; initialDept: DeptKey }) {
+/** Fixed colors for well-known statuses; others cycle the chart palette. */
+function bucketColor(label: string, i: number): string {
+  const u = label.toUpperCase();
+  if (u.startsWith("FILED - EVC PENDING")) return "var(--brand-green)";
+  if (u.startsWith("FILED")) return "var(--brand-green-deep)";
+  if (u === "READY" || u === "REPORT READY") return "var(--brand-blue-soft)";
+  if (u === "NOT UPDATED") return "#C7CCD6";
+  if (u === "NOT APPLICABLE" || u === "NA" || u === "NOT TO FILE") return "#8A92A3";
+  if (u === "NO RESPONSE") return "#B4623A";
+  return CHART_COLORS[i % CHART_COLORS.length];
+}
+
+function FilingCard({
+  title,
+  subtitle,
+  buckets,
+  progress,
+}: {
+  title: string;
+  subtitle: string;
+  buckets: FilingBucket[];
+  progress: number;
+}) {
+  const total = buckets.reduce((n, b) => n + b.count, 0);
+  const filed = buckets
+    .filter((b) => b.label.toUpperCase().startsWith("FILED"))
+    .reduce((n, b) => n + b.count, 0);
+  const colored = buckets.map((b, i) => ({ ...b, color: bucketColor(b.label, i) }));
+  return (
+    <div className="flex min-w-0 flex-col gap-4 p-6" style={cardStyle}>
+      <div>
+        <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+          {title}
+        </h3>
+        <div className="mt-0.5 text-[11px]" style={{ color: "var(--ink-400)" }}>
+          {subtitle}
+        </div>
+      </div>
+      <div className="flex items-center gap-5">
+        <Donut
+          segments={colored.map((b) => ({ value: b.count, color: b.color }))}
+          size={132}
+          thickness={22}
+          centerTop={String(Math.round(filed * progress))}
+          centerBottom="FILED"
+          progress={progress}
+        />
+        <ul className="m-0 flex min-w-0 flex-1 list-none flex-col gap-[7px] p-0 text-[12px]">
+          {colored.map((b) => (
+            <li key={b.label} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: b.color }} />
+              <span className="truncate" style={{ color: "var(--ink-700)" }}>{b.label}</span>
+              <span className="ml-auto font-bold tabular-nums" style={{ color: "var(--ink-900)" }}>
+                {b.count}
+              </span>
+            </li>
+          ))}
+          <li
+            className="mt-1 flex items-center gap-2 pt-1.5 text-[11px] font-semibold uppercase"
+            style={{ letterSpacing: "0.08em", color: "var(--ink-400)", borderTop: "1px solid var(--ink-100)" }}
+          >
+            Active clients
+            <span className="ml-auto font-bold tabular-nums" style={{ color: "var(--ink-700)" }}>
+              {total}
+            </span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+export function ReportsView({
+  data,
+  initialDept,
+  filing,
+}: {
+  data: ReportsData;
+  initialDept: DeptKey;
+  filing: FilingSummary;
+}) {
   const [dept, setDept] = useState<DeptKey>(initialDept);
   const [drill, setDrill] = useState<{ id: string; name: string } | null>(null);
   const stats = useReveal<HTMLElement>();
   const charts = useReveal<HTMLElement>();
   const statP = useProgress(stats.shown, 1100);
   const chartP = useProgress(charts.shown, 1300);
+  const filingReveal = useReveal<HTMLElement>();
+  const filingP = useProgress(filingReveal.shown, 1200);
 
   const rows = useMemo(
     () =>
@@ -124,6 +218,41 @@ export function ReportsView({ data, initialDept }: { data: ReportsData; initialD
         <StatCard value={Math.round((totalClients - totCallsDone) * statP)} label="Calling pending" color="#8F6A2E" />
         <StatCard value={Math.round(totMsgsDone * statP)} label="Messages done" color="var(--brand-green-deep)" />
         <StatCard value={Math.round((totalClients - totMsgsDone) * statP)} label="Messages pending" color="#8F6A2E" />
+      </section>
+
+      {/* Annual filing status (firm-wide, dept-independent) */}
+      <section ref={filingReveal.ref}>
+        <div className="dot-rule mb-5 w-40" />
+        <h2
+          className="m-0 mb-1 text-[26px] font-semibold"
+          style={{ fontFamily: "var(--font-display)", color: "var(--brand-blue-deep)" }}
+        >
+          Filing status
+        </h2>
+        <p className="m-0 mb-4 text-sm" style={{ color: "var(--ink-500)" }}>
+          Firm-wide return-filing progress from the master client list — updates on every
+          SharePoint import.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <FilingCard
+            title="Income Tax returns"
+            subtitle="ITR Status — AY 2026-27"
+            buckets={filing.itr}
+            progress={filingP}
+          />
+          <FilingCard
+            title="GSTR-9 annual returns"
+            subtitle="GSTR-9 Status — FY 2025-26"
+            buckets={filing.gstr9}
+            progress={filingP}
+          />
+          <FilingCard
+            title="GSTR-9C reconciliations"
+            subtitle="GSTR-9C Status — FY 2025-26"
+            buckets={filing.gstr9c}
+            progress={filingP}
+          />
+        </div>
       </section>
 
       {/* Donut + progress bars */}
