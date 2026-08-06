@@ -3,8 +3,17 @@ import { NavSubmitButton } from "@/components/button";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  BulkActionBar,
+  BulkSelectProvider,
+  RowCheckbox,
+  SelectAllCheckbox,
+} from "@/components/bulk-select";
+import { EditIconLink } from "@/components/edit-link";
 
 const PAGE_SIZE = 50;
+/** Cap on "select all matching" so a filterless page doesn't ship every id. */
+const MAX_SELECT_ALL = 2000;
 
 const TH = "px-4 py-2.5 text-[11px] font-semibold uppercase";
 const THS = { letterSpacing: "0.1em" } as const;
@@ -18,27 +27,39 @@ export default async function ClientsPage({
   const supabase = await createClient();
   const page = Math.max(1, Number(params.page ?? 1));
 
-  let query = supabase
+  // Filter shared by the visible page and by "select all matching".
+  const orTerm = params.q
+    ? (() => {
+        const term = params.q.replaceAll(",", " ");
+        return `name.ilike.%${term}%,trade_name.ilike.%${term}%,pan.ilike.%${term}%,gstin.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%`;
+      })()
+    : null;
+  const eqFilters: [string, string][] = [];
+  if (params.category) eqFilters.push(["category", params.category]);
+  if (params.status) eqFilters.push(["status", params.status]);
+  if (params.partner) eqFilters.push(["partner_incharge", params.partner]);
+  if (params.it_category) eqFilters.push(["it_category", params.it_category]);
+
+  let pageQuery = supabase
     .from("clients_wide")
     .select(
       "id, name, trade_name, pan, category, status, partner_incharge, income_tax_incharge, gst_incharge",
       { count: "exact" }
     );
+  if (orTerm) pageQuery = pageQuery.or(orTerm);
+  for (const [col, val] of eqFilters) pageQuery = pageQuery.eq(col, val);
 
-  if (params.q) {
-    const q = params.q.replaceAll(",", " ");
-    query = query.or(
-      `name.ilike.%${q}%,trade_name.ilike.%${q}%,pan.ilike.%${q}%`
-    );
-  }
-  if (params.category) query = query.eq("category", params.category);
-  if (params.status) query = query.eq("status", params.status);
-  if (params.partner) query = query.eq("partner_incharge", params.partner);
-
-  const { data: clients, count, error } = await query
+  const { data: clients, count, error } = await pageQuery
     .order("name")
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (error) throw error;
+
+  // Ids for every row matching the filter, so the action bar can offer
+  // "select all matching" beyond the current page.
+  let idQuery = supabase.from("clients_wide").select("id");
+  if (orTerm) idQuery = idQuery.or(orTerm);
+  for (const [col, val] of eqFilters) idQuery = idQuery.eq(col, val);
+  const { data: allMatching } = await idQuery.limit(MAX_SELECT_ALL);
 
   const { data: partners } = await supabase
     .from("staff")
@@ -55,6 +76,8 @@ export default async function ClientsPage({
 
   const total = count ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageIds = ids;
+  const allFilteredIds = (allMatching ?? []).map((c) => c.id);
 
   const inputStyle = {
     border: "1px solid var(--border-strong)",
@@ -87,8 +110,8 @@ export default async function ClientsPage({
         <input
           name="q"
           defaultValue={params.q}
-          placeholder="Search name / trade name / PAN"
-          className="w-[280px] px-3 py-2"
+          placeholder="Search name / trade name / PAN / GSTIN / mobile / email"
+          className="w-[320px] px-3 py-2"
           style={inputStyle}
         />
         <select name="category" defaultValue={params.category ?? ""} className="cursor-pointer px-3 py-2" style={inputStyle}>
@@ -103,6 +126,12 @@ export default async function ClientsPage({
             <option key={p.full_name}>{p.full_name}</option>
           ))}
         </select>
+        <select name="it_category" defaultValue={params.it_category ?? ""} className="cursor-pointer px-3 py-2" style={inputStyle}>
+          <option value="">All IT categories</option>
+          {["NON AUDIT", "SALARY", "AUDIT", "COMP AUDIT", "COMP DIRECTOR", "AUDIT PARTNER", "TRUST AUDIT", "NA"].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
         <select name="status" defaultValue={params.status ?? ""} className="cursor-pointer px-3 py-2" style={inputStyle}>
           <option value="">All statuses</option>
           <option value="active">active</option>
@@ -114,6 +143,7 @@ export default async function ClientsPage({
         </NavSubmitButton>
       </form>
 
+      <BulkSelectProvider pageIds={pageIds} allFilteredIds={allFilteredIds}>
       <div
         className="overflow-x-auto bg-white"
         style={{
@@ -122,9 +152,10 @@ export default async function ClientsPage({
           boxShadow: "var(--shadow-sm)",
         }}
       >
-        <table className="w-full min-w-[900px] border-collapse text-[13px]">
+        <table className="w-full min-w-[980px] border-collapse text-[13px]">
           <thead>
             <tr style={{ background: "var(--paper-2)", color: "var(--ink-500)" }} className="text-left">
+              <th className="w-9 px-4 py-2.5"><SelectAllCheckbox /></th>
               <th className={TH} style={THS}>Client</th>
               <th className={TH} style={THS}>Trade Name</th>
               <th className={TH} style={THS}>PAN</th>
@@ -134,6 +165,7 @@ export default async function ClientsPage({
               <th className={TH} style={THS}>GST</th>
               <th className={TH} style={THS}>Mobile</th>
               <th className={TH} style={THS}>Status</th>
+              <th className={TH} style={THS}>Edit</th>
             </tr>
           </thead>
           <tbody>
@@ -141,6 +173,7 @@ export default async function ClientsPage({
               const phone = phoneById.get(c.id) ?? null;
               return (
                 <tr key={c.id} style={{ borderTop: "1px solid var(--ink-100)" }} className="hover:bg-[var(--paper)]">
+                  <td className="px-4 py-[11px]"><RowCheckbox id={c.id} /></td>
                   <td className="whitespace-nowrap px-4 py-[11px]">
                     <AppLink
                       href={`/clients/${c.id}`}
@@ -170,12 +203,17 @@ export default async function ClientsPage({
                   <td className="px-4 py-[11px]">
                     <StatusBadge status={c.status} />
                   </td>
+                  <td className="px-4 py-[11px]">
+                    <EditIconLink href={`/clients/${c.id}/edit`} />
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <BulkActionBar />
+      </BulkSelectProvider>
 
       {pages > 1 && (
         <div className="flex items-center gap-2 text-sm">

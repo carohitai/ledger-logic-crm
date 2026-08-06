@@ -39,6 +39,8 @@ interface ExistingClient {
   pan: string | null;
   row_hash: string | null;
   status: string;
+  /** Columns hand-edited in the CRM — the sheet must not overwrite these. */
+  manual_fields: string[] | null;
 }
 
 function rowHash(row: NormalizedRow, allotments: Record<string, string>): string {
@@ -71,7 +73,7 @@ export async function runSync(
       supabase.from("staff_aliases").select("alias, staff_id"),
       supabase
         .from("clients")
-        .select("id, import_key, pan, row_hash, status")
+        .select("id, import_key, pan, row_hash, status, manual_fields")
         .limit(100000),
     ]);
   if (aliasErr) throw aliasErr;
@@ -221,6 +223,7 @@ export async function runSync(
           pan: p.row.fields.pan,
           row_hash: p.hash,
           status: "active",
+          manual_fields: [],
         };
       }
     });
@@ -228,10 +231,21 @@ export async function runSync(
     // updates + confirmed renames (field updates); unchanged rows just get stamped
     for (const p of planned) {
       if (p.action === "update" || (p.action === "rename_candidate" && opts.applyRenames)) {
+        // Hand-edited columns win over the sheet: staff correct phone numbers
+        // and emails in the CRM, and an import must not undo that.
+        const manual = new Set(p.client!.manual_fields ?? []);
+        const sheetFields = Object.fromEntries(
+          Object.entries(p.row.fields).filter(([key]) => !manual.has(key))
+        );
+        if (manual.size) {
+          p.messages.push(
+            `Kept CRM-edited ${[...manual].join(", ")} (not overwritten by the sheet)`
+          );
+        }
         const { error } = await supabase
           .from("clients")
           .update({
-            ...p.row.fields,
+            ...sheetFields,
             import_key: p.row.importKey,
             row_hash: p.hash,
             status: "active",
