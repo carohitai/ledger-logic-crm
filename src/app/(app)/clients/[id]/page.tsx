@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SubmitButton } from "@/components/button";
 import { BackLink } from "@/components/back-link";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
+import { EditIconLink } from "@/components/edit-link";
 import { WA_TEMPLATES } from "@/lib/whatsapp-templates";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
@@ -159,6 +160,9 @@ export default async function ClientDetailPage({
             {client.name}
           </h1>
           <StatusBadge status={client.status} />
+          <span className="ml-auto">
+            <EditIconLink href={`/clients/${id}/edit`} label="Edit profile" />
+          </span>
         </div>
         <p className="mt-2 text-sm" style={{ color: "var(--ink-500)" }}>
           {client.trade_name ?? client.name} · PAN{" "}

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NavProgressProvider } from "@/components/nav-progress";
 import { SignOutButton } from "./signout";
 import { NavLink } from "./nav-link";
+import { NotificationBell } from "@/components/notification-bell";
 
 export default async function AppLayout({
   children,
@@ -55,7 +56,10 @@ export default async function AppLayout({
           <NavLink href="/my-clients">My Clients</NavLink>
           <NavLink href="/clients">All Clients</NavLink>
           {(isAdmin || me?.app_role === "partner") && (
-            <NavLink href="/reports">Reports</NavLink>
+            <>
+              <NavLink href="/reports">Reports</NavLink>
+              <NavLink href="/bulk-send">Bulk Send</NavLink>
+            </>
           )}
           {isAdmin && (
             <>
@@ -64,6 +68,7 @@ export default async function AppLayout({
             </>
           )}
           <span className="ml-auto flex items-center gap-2.5">
+            <NotificationBell />
             <span
               className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-full text-[11px] font-bold tracking-wide"
               style={{ background: "var(--brand-blue-pale)", color: "var(--brand-blue-deep)" }}
