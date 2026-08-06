@@ -12,6 +12,12 @@ export interface WaTemplateValues {
   partner_incharge?: string;
   accounts_incharge?: string;
   gst_incharge?: string;
+  /**
+   * Header image URL / media id for templates with a media header
+   * (it_reminder). Server-side callers fill this from ITR_TEMPLATE_MEDIA;
+   * it never appears in the rendered body text.
+   */
+  media?: string;
 }
 
 export interface NextelTemplate {
@@ -55,7 +61,14 @@ export const WA_TEMPLATES: WaTemplate[] = [
     key: "it_reminder",
     label: "Income Tax return reminder",
     text: "Dear {client}, your Income Tax return filing is pending. The due date for filing is 31st August. Filing after the due date attracts a late filing fee of up to Rs. 5,000 u/s 234F (Rs. 1,000 where total income is up to Rs. 5 lakh) and interest at 1% per month on the tax payable u/s 234A. Generic list of documents required (as applicable to you): 1) PAN & Aadhaar, 2) Form 16 / salary slips, 3) Bank statements for the full year, 4) Interest & TDS certificates (FD, savings, Form 16A), 5) Investment / deduction proofs (LIC, PPF, ELSS, mediclaim, tuition fees etc.), 6) Home loan interest certificate / rent receipts, 7) Capital gains statements (shares, mutual funds, property), 8) Details of any other income. Kindly share the applicable documents at your earliest convenience so we can file well in time. Regards, Kolte & Associates LLP.",
-    nextel: null,
+    // Maps to the approved itr_template button template on Nextel:
+    // arg 1 is the header image URL / media id, arg 2 the client name.
+    nextel: {
+      templateId: "itr_template",
+      language: "en",
+      type: "buttonTemplate",
+      args: (v) => [v.media ?? "", v.client],
+    },
   },
   {
     key: "document_request",
