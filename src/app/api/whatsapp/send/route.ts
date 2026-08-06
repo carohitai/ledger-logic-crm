@@ -68,6 +68,15 @@ export async function POST(request: Request) {
     const name = Array.isArray(staff) ? staff[0]?.full_name : staff?.full_name;
     if (name) incharges[a.role] = name;
   }
+  // it_reminder's approved template carries a media header; its URL/media id
+  // comes from env rather than per-client data.
+  if (template.key === "it_reminder" && !process.env.ITR_TEMPLATE_MEDIA) {
+    return NextResponse.json(
+      { error: "ITR_TEMPLATE_MEDIA is not configured (header image for the itr_template)" },
+      { status: 503 }
+    );
+  }
+
   const quarterly = (client.gst_frequency ?? "").toUpperCase().includes("QUARTERLY");
   const values: WaTemplateValues = {
     client: client.name,
@@ -75,6 +84,7 @@ export async function POST(request: Request) {
     partner_incharge: incharges.partner ?? "-",
     accounts_incharge: incharges.accounts ?? "-",
     gst_incharge: incharges.gst ?? "-",
+    media: process.env.ITR_TEMPLATE_MEDIA,
   };
 
   try {

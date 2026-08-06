@@ -134,6 +134,8 @@ export function DashboardView({
   statCalls,
   statCallback,
   statWa,
+  totalClients,
+  contactedClients,
   isAdmin,
   ack,
 }: {
@@ -144,6 +146,10 @@ export function DashboardView({
   statCalls: number;
   statCallback: number;
   statWa: number;
+  /** Firm-wide distinct client count (a client has several incharges, so per-staff counts can't just be summed). */
+  totalClients: number;
+  /** Firm-wide distinct clients with at least one call. */
+  contactedClients: number;
   isAdmin: boolean;
   ack: (alertId: string) => Promise<void>;
 }) {
@@ -193,8 +199,12 @@ export function DashboardView({
     .filter((r) => r.assigned > 0)
     .sort((a, b) => b.assigned - a.assigned);
 
-  const totalAssigned = rows.reduce((n, r) => n + r.assigned, 0);
-  const totalContacted = rows.reduce((n, r) => n + r.contacted, 0);
+  // Firm-wide totals must be distinct client counts from the server: a client
+  // is allotted to several staff (one per role), so summing per-staff numbers
+  // counts each client up to 4-5 times. Per-department totals are safe to sum
+  // because a client holds at most one allotment per role.
+  const totalAssigned = dept === "all" ? totalClients : rows.reduce((n, r) => n + r.assigned, 0);
+  const totalContacted = dept === "all" ? contactedClients : rows.reduce((n, r) => n + r.contacted, 0);
   const coverage = totalAssigned ? Math.round((totalContacted / totalAssigned) * 100) : 0;
 
   const staffSegs = rows.map((r) => ({ value: r.assigned, color: COLORS[r.i % COLORS.length] }));
