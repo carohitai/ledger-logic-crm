@@ -55,7 +55,15 @@ export const WA_TEMPLATES: WaTemplate[] = [
     key: "it_reminder",
     label: "Income Tax return reminder",
     text: "Dear {client}, your Income Tax return filing is pending. Kindly share the required documents at your earliest convenience so we can proceed.",
-    nextel: null,
+    // Maps to the approved itr_template on Nextel: {{1}} client name. The
+    // image header (01-cover.png, hosted in the ka-crm Supabase whatsapp-media
+    // bucket) was registered with the template, so Nextel attaches it on send.
+    nextel: {
+      templateId: "itr_template",
+      language: "en",
+      type: "template",
+      args: (v) => [v.client],
+    },
   },
   {
     key: "document_request",
