@@ -129,6 +129,38 @@ export default async function ClientDetailPage({
     ["IT Category", client.it_category],
     ["GST Frequency", client.gst_frequency],
     ["Email", client.email],
+    ["Turnover FY 2025-26", client.turnover],
+    ["PT EC No", client.pt_ec_no],
+    ["PT RC No", client.pt_rc_no],
+    ["E-Invoice", client.e_invoice],
+  ];
+
+  const compliance: [string, string | null][] = [
+    ["ITR Status", client.itr_status],
+    ["Audit Report Status", client.audit_report_status],
+    ["Document Status (Bookkeeping)", client.document_status],
+    ["DSC Status", client.dsc_status],
+    ["GSTR-9 Status", client.gstr9_status],
+    ["GSTR-9C Status", client.gstr9c_status],
+    ["Ledger Logic", client.ledger_logic],
+    ["ERP CA Task", client.erp_ca_task],
+    ["DPT-3 Finalization", client.dpt3_finalization],
+  ];
+
+  const taxAndFees: [string, string | null][] = [
+    ["Advance Tax Applicable", client.advance_tax_applicable],
+    ["Advance Tax Q1", client.advance_tax_q1],
+    ["Advance Tax Q2", client.advance_tax_q2],
+    ["Advance Tax Q3", client.advance_tax_q3],
+    ["Advance Tax Q4", client.advance_tax_q4],
+    ["TDS Applicable", client.tds_applicable],
+    ["TDS Q1", client.tds_q1],
+    ["TDS Q2", client.tds_q2],
+    ["TDS Q3", client.tds_q3],
+    ["TDS Q4", client.tds_q4],
+    ["Fees Invoice", client.fees_invoice],
+    ["Fees Schedule", client.fees_schedule],
+    ["Date of Fees Schedule", client.fees_schedule_date],
   ];
 
   const contact = { id: client.id, name: client.name, phone: client.phone };
@@ -306,6 +338,38 @@ export default async function ClientDetailPage({
           </h3>
           <dl className="m-0 space-y-2.5 text-[13px]">
             {info.map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4">
+                <dt style={{ color: "var(--ink-500)" }}>{label}</dt>
+                <dd className="m-0 text-right font-semibold" style={{ color: "var(--ink-900)" }}>
+                  {value ?? "—"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="px-6 py-[22px]" style={cardStyle}>
+          <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+            Compliance status
+          </h3>
+          <dl className="m-0 space-y-2.5 text-[13px]">
+            {compliance.map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4">
+                <dt style={{ color: "var(--ink-500)" }}>{label}</dt>
+                <dd className="m-0 text-right font-semibold" style={{ color: "var(--ink-900)" }}>
+                  {value ?? "—"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="px-6 py-[22px]" style={cardStyle}>
+          <h3 className="mb-4 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+            Advance tax, TDS &amp; fees
+          </h3>
+          <dl className="m-0 space-y-2.5 text-[13px]">
+            {taxAndFees.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4">
                 <dt style={{ color: "var(--ink-500)" }}>{label}</dt>
                 <dd className="m-0 text-right font-semibold" style={{ color: "var(--ink-900)" }}>

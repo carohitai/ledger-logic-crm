@@ -1,6 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ReportsView, type DeptKey, type ReportStaff, type ReportsData } from "./reports-view";
+import {
+  ReportsView,
+  type DeptKey,
+  type FilingBucket,
+  type FilingSummary,
+  type ReportStaff,
+  type ReportsData,
+} from "./reports-view";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +17,30 @@ const ROLE_BY_DEPT: Record<DeptKey, string> = {
   acc: "accounts",
   bill: "billing",
 };
+
+/** "FILED - EVC DONE" -> "Filed - EVC Done"; blank -> "Not updated". */
+function prettyStatus(raw: string | null): string {
+  const v = (raw ?? "").replace(/\s+/g, " ").trim();
+  if (v === "") return "Not updated";
+  return v
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
+    .replace(/\bEvc\b/g, "EVC")
+    .replace(/\bItr\b/g, "ITR")
+    .replace(/\bNa\b/g, "NA");
+}
+
+/** Counts of each status value, most common first, blanks labelled "Not updated". */
+function tally(values: (string | null)[]): FilingBucket[] {
+  const counts = new Map<string, number>();
+  for (const v of values) {
+    const label = prettyStatus(v);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
 
 export default async function ReportsPage({
   searchParams,
@@ -30,10 +61,21 @@ export default async function ReportsPage({
   // Reports are firm-wide; restrict to admins and partners.
   if (me?.app_role !== "admin" && me?.app_role !== "partner") redirect("/dashboard");
 
-  const [{ data: deptRows }, { data: gradeRows }] = await Promise.all([
+  const [{ data: deptRows }, { data: gradeRows }, { data: filingRows }] = await Promise.all([
     supabase.from("report_staff_dept").select("*"),
     supabase.from("report_staff_grade").select("*"),
+    supabase
+      .from("clients")
+      .select("itr_status, gstr9_status, gstr9c_status")
+      .eq("status", "active")
+      .limit(100000),
   ]);
+
+  const filing: FilingSummary = {
+    itr: tally((filingRows ?? []).map((r) => r.itr_status)),
+    gstr9: tally((filingRows ?? []).map((r) => r.gstr9_status)),
+    gstr9c: tally((filingRows ?? []).map((r) => r.gstr9c_status)),
+  };
 
   const gradesByKey = new Map<string, { grade: string; count: number }[]>();
   for (const g of gradeRows ?? []) {
@@ -69,5 +111,5 @@ export default async function ReportsPage({
     ? (params.dept as DeptKey)
     : "gst";
 
-  return <ReportsView data={empty} initialDept={initialDept} />;
+  return <ReportsView data={empty} initialDept={initialDept} filing={filing} />;
 }
