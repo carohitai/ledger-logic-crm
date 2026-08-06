@@ -134,7 +134,8 @@ export function DashboardView({
   statCalls,
   statCallback,
   statWa,
-  clientsTotal,
+  totalClients,
+  contactedClients,
   isAdmin,
   ack,
 }: {
@@ -145,8 +146,10 @@ export function DashboardView({
   statCalls: number;
   statCallback: number;
   statWa: number;
-  /** Distinct active clients — summing per-staff counts would count a client once per incharge. */
-  clientsTotal: number;
+  /** Firm-wide distinct client count (a client has several incharges, so per-staff counts can't just be summed). */
+  totalClients: number;
+  /** Firm-wide distinct clients with at least one call. */
+  contactedClients: number;
   isAdmin: boolean;
   ack: (alertId: string) => Promise<void>;
 }) {
@@ -196,12 +199,12 @@ export function DashboardView({
     .filter((r) => r.assigned > 0)
     .sort((a, b) => b.assigned - a.assigned);
 
-  const totalAssigned = rows.reduce((n, r) => n + r.assigned, 0);
-  // In "all" mode, summing per-staff distinct counts multi-counts clients that
-  // have several incharges — show the true distinct total instead. Per-dept
-  // sums are already distinct (one incharge per role per client).
-  const displayClients = dept === "all" ? clientsTotal : totalAssigned;
-  const totalContacted = rows.reduce((n, r) => n + r.contacted, 0);
+  // Firm-wide totals must be distinct client counts from the server: a client
+  // is allotted to several staff (one per role), so summing per-staff numbers
+  // counts each client up to 4-5 times. Per-department totals are safe to sum
+  // because a client holds at most one allotment per role.
+  const totalAssigned = dept === "all" ? totalClients : rows.reduce((n, r) => n + r.assigned, 0);
+  const totalContacted = dept === "all" ? contactedClients : rows.reduce((n, r) => n + r.contacted, 0);
   const coverage = totalAssigned ? Math.round((totalContacted / totalAssigned) * 100) : 0;
 
   const staffSegs = rows.map((r) => ({ value: r.assigned, color: COLORS[r.i % COLORS.length] }));
@@ -302,7 +305,7 @@ export function DashboardView({
             </h3>
             <div className="flex flex-wrap items-center gap-6">
               <div className="shrink-0">
-                <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(displayClients)} centerBottom="CLIENTS" progress={chartP} />
+                <Donut segments={staffSegs} size={190} thickness={30} centerTop={String(totalAssigned)} centerBottom="CLIENTS" progress={chartP} />
               </div>
               <ul className="grid min-w-[200px] flex-1 grid-cols-2 gap-x-4 gap-y-2">
                 {rows.map((r) => (
@@ -374,7 +377,7 @@ export function DashboardView({
             Staff allotment — {DEPT_LABELS[dept]}
           </h2>
           <span className="text-xs" style={{ color: "var(--ink-400)" }}>
-            {displayClients} clients · sorted by allotment
+            {totalAssigned} clients · sorted by allotment
           </span>
         </div>
         <div className="overflow-x-auto" style={{ ...card, overflow: "hidden" }}>

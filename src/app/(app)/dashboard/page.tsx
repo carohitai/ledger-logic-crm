@@ -54,15 +54,19 @@ export default async function DashboardPage() {
 
   // ---------------- Admin / partner: firm-wide team dashboard ----------------
   if (isAdmin) {
-    const [{ data: statsRaw }, statCalls, statCallback, statWa, { data: alertsRaw }, clientsTotal] =
+    const [{ data: statsRaw }, statCalls, statCallback, statWa, { data: alertsRaw }, totalClients, { data: contactedRows }] =
       await Promise.all([
         supabase.from("dashboard_staff_stats").select("*"),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).gte("placed_at", today.toISOString()).then((r) => r.count ?? 0),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).eq("status", "scheduled").then((r) => r.count ?? 0),
         supabase.from("call_logs").select("id", { count: "exact", head: true }).eq("whatsapp_sent", true).then((r) => r.count ?? 0),
         supabase.from("alerts").select("id, client_id, type, message, created_at, acknowledged_at").eq("staff_id", me?.id ?? "").order("created_at", { ascending: false }).limit(50),
+        // Firm-wide client count. Summing per-staff assigned counts instead
+        // would count a client once per incharge (partner/GST/IT/accounts…).
         supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "active").then((r) => r.count ?? 0),
+        supabase.from("call_logs").select("client_id"),
       ]);
+    const contactedClients = new Set((contactedRows ?? []).map((r) => r.client_id)).size;
 
     const stats: StaffStat[] = (statsRaw ?? []).map((s) => ({
       id: s.id,
@@ -96,7 +100,8 @@ export default async function DashboardPage() {
         statCalls={statCalls}
         statCallback={statCallback}
         statWa={statWa}
-        clientsTotal={clientsTotal}
+        totalClients={totalClients}
+        contactedClients={contactedClients}
         isAdmin
         ack={acknowledge}
       />
