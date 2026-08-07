@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:dates": "node --experimental-strip-types --no-warnings src/lib/tasks/periods.test.mts"
+    "test:dates": "node --experimental-strip-types --no-warnings src/lib/tasks/periods.test.mts",
+    "validate:gst": "node scripts/validate-gst-endpoint.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
