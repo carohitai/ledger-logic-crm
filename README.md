@@ -77,9 +77,16 @@ Mailboxes are then managed at `/admin/mailboxes` — no redeploy to add one.
 
 ### Scheduling
 
-`vercel.json` registers a single `/api/cron/tick` dispatcher; each job is gated
-internally on the IST clock. This keeps the cron-entry count within Vercel's
+`vercel.json` registers a single `/api/cron/tick` dispatcher which decides
+internally what is due. This keeps the cron-entry count within Vercel's
 per-plan limit and means new jobs need no `vercel.json` change.
+
+It is scheduled **daily** (`30 1 * * *` UTC = 07:00 IST) because Vercel's Hobby
+plan permits only one cron firing per day. On Pro, raise it to `*/15 * * * *`
+and nothing else changes — mail and call sync then pick up near-real-time,
+while task generation stays once a day. Daily jobs are gated on "has this
+already run today, IST?", not on a particular hour, so both cadences are
+correct.
 
 ```
 GET /api/cron/tick                          # run whatever is due
@@ -106,7 +113,6 @@ flag is set.
 | `CDR_MAX_RECORDS_PER_RUN` | `500` | |
 | `TASKS_ENABLED` | `false` | Enable task generation |
 | `TASK_GEN_HORIZON_DAYS` | `45` | How far ahead to generate |
-| `CRON_DAILY_HOUR_IST` | `3` | Hour the daily jobs run |
 | `DEPT_SYNC_ENABLED` | `false` | Enable department filing-status reconciliation |
 | `DEPT_PROVIDER_GST` | — | `public-gst` to enable the free GST lookup |
 | `PUBLIC_GST_API_URL` | — | Base URL for that lookup |

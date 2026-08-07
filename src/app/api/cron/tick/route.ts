@@ -1,11 +1,15 @@
 // Single scheduled entry point.
 //
-// Vercel caps how many cron entries a plan may have (and on Hobby, how often
-// they may fire), so rather than registering one cron per job this registers
-// ONE and gates each job internally on the IST clock. That follows the pattern
-// /api/cron/gst-reminder already documents — a frequent trigger with an
-// internal date gate is more robust across plans than a clever cron expression
-// — and means adding a job later needs no vercel.json change at all.
+// Vercel caps how many cron entries a plan may have and, on Hobby, permits
+// only ONE firing per day. So rather than registering a cron per job, this
+// registers one entry and decides internally what is due — the pattern
+// /api/cron/gst-reminder already documents, and the reason the Hobby limit is
+// a one-line schedule change rather than a redesign. Adding a job later needs
+// no vercel.json change at all.
+//
+// Daily jobs are gated on "has this already run today, IST?" rather than on a
+// particular hour, so the same code is correct whether the schedule fires
+// every 15 minutes (Pro) or once a day (Hobby).
 //
 // Every job is individually try/caught: one failing integration must not stop
 // the others from running.
@@ -16,7 +20,7 @@
 // Authorised with the same `Bearer ${CRON_SECRET}` header as the other crons.
 
 import { NextResponse } from "next/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { runMailSync } from "@/lib/inbox/mail-sync";
 import { runCdrSync } from "@/lib/inbox/cdr-sync";
 import { runTaskGeneration } from "@/lib/tasks/generate";
@@ -26,17 +30,47 @@ export const maxDuration = 300;
 
 type Job = "mail" | "cdr" | "tasks" | "dept";
 
-/** Hour of the IST day the daily jobs run at. */
-const DAILY_HOUR = Number(process.env.CRON_DAILY_HOUR_IST ?? 3);
+function istDate(when: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(when);
+}
 
-function istHour(): number {
-  return Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      hour12: false,
-    }).format(new Date())
-  );
+/**
+ * "Has this job already run today, IST?" rather than "is it a particular hour
+ * right now?".
+ *
+ * The hour-gate version only worked at a high tick cadence — on a plan limited
+ * to ONE cron firing per day, a job gated on `hour === 3` would simply never
+ * run unless the single fire happened to land in that hour. This form is
+ * correct at any cadence: fire every 15 minutes and the daily jobs still run
+ * once; fire once a day and they run on that fire.
+ */
+async function dueToday(
+  db: SupabaseClient,
+  job: Job
+): Promise<boolean> {
+  const { data } = await db
+    .from("sync_state")
+    .select("last_run_at")
+    .eq("key", `job:${job}`)
+    .maybeSingle();
+  if (!data?.last_run_at) return true;
+  return istDate(new Date(data.last_run_at)) !== istDate();
+}
+
+async function markRan(
+  db: SupabaseClient,
+  job: Job
+): Promise<void> {
+  await db.from("sync_state").upsert({
+    key: `job:${job}`,
+    last_run_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 }
 
 function enabled(name: string, fallback = false): boolean {
@@ -62,65 +96,47 @@ export async function GET(request: Request) {
     auth: { persistSession: false },
   });
 
-  const hour = istHour();
-  const isDailyWindow = hour === DAILY_HOUR;
   const results: Record<string, unknown> = {};
   const ran: Job[] = [];
   const skipped: string[] = [];
 
-  const shouldRun = (job: Job, dueNow: boolean, flag: string, flagDefault = false) => {
+  /** `daily` jobs run once per IST day; the others run on every tick. */
+  const shouldRun = async (job: Job, flag: string, daily: boolean) => {
     if (only) return only === job;
-    if (!enabled(flag, flagDefault)) {
+    if (!enabled(flag)) {
       skipped.push(`${job}: disabled (${flag})`);
       return false;
     }
-    if (!dueNow) {
-      skipped.push(`${job}: not due (IST hour ${hour})`);
+    if (daily && !force && !(await dueToday(db, job))) {
+      skipped.push(`${job}: already ran today (IST)`);
       return false;
     }
     return true;
   };
 
-  // Mail and CDR are cheap and want low latency, so they run every tick.
-  if (shouldRun("mail", true, "MAIL_SYNC_ENABLED")) {
-    ran.push("mail");
+  const run = async (job: Job, flag: string, daily: boolean, fn: () => Promise<unknown>) => {
+    if (!(await shouldRun(job, flag, daily))) return;
+    ran.push(job);
     try {
-      results.mail = await runMailSync(db);
+      results[job] = await fn();
     } catch (e) {
-      results.mail = { error: e instanceof Error ? e.message : String(e) };
+      results[job] = { error: e instanceof Error ? e.message : String(e) };
     }
-  }
+    // Marked even on failure, so a persistently broken integration cannot
+    // monopolise every tick. The next day's run retries it.
+    await markRan(db, job);
+  };
 
-  if (shouldRun("cdr", true, "CDR_SYNC_ENABLED")) {
-    ran.push("cdr");
-    try {
-      results.cdr = await runCdrSync(db);
-    } catch (e) {
-      results.cdr = { error: e instanceof Error ? e.message : String(e) };
-    }
-  }
+  // Mail and CDR want low latency, so they run on every tick when the schedule
+  // allows more than one a day.
+  await run("mail", "MAIL_SYNC_ENABLED", false, () => runMailSync(db));
+  await run("cdr", "CDR_SYNC_ENABLED", false, () => runCdrSync(db));
 
-  // Generation and department reconciliation are daily; the statutory calendar
-  // does not move minute to minute.
-  if (shouldRun("tasks", force || isDailyWindow, "TASKS_ENABLED")) {
-    ran.push("tasks");
-    try {
-      results.tasks = await runTaskGeneration(db, {
-        dryRun: searchParams.get("dryRun") === "true",
-      });
-    } catch (e) {
-      results.tasks = { error: e instanceof Error ? e.message : String(e) };
-    }
-  }
+  // The statutory calendar does not move minute to minute.
+  await run("tasks", "TASKS_ENABLED", true, () =>
+    runTaskGeneration(db, { dryRun: searchParams.get("dryRun") === "true" })
+  );
+  await run("dept", "DEPT_SYNC_ENABLED", true, () => runDeptReconcile(db, "gst"));
 
-  if (shouldRun("dept", force || isDailyWindow, "DEPT_SYNC_ENABLED")) {
-    ran.push("dept");
-    try {
-      results.dept = await runDeptReconcile(db, "gst");
-    } catch (e) {
-      results.dept = { error: e instanceof Error ? e.message : String(e) };
-    }
-  }
-
-  return NextResponse.json({ ok: true, istHour: hour, ran, skipped, results });
+  return NextResponse.json({ ok: true, istDate: istDate(), ran, skipped, results });
 }
