@@ -29,7 +29,7 @@ export function graphConfigured(): boolean {
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
-async function getToken(): Promise<string> {
+export async function getToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
     return cachedToken.value;
   }
@@ -68,6 +68,25 @@ async function graphGet(url: string, token: string): Promise<Response> {
     throw new Error(`Graph request failed (${res.status}): ${await res.text()}`);
   }
   return res;
+}
+
+export { GRAPH_BASE };
+
+/**
+ * Raw Graph call sharing the module's token cache. Unlike `graphGet` this does
+ * not throw on a non-2xx — mail sync needs to read 429 `Retry-After` and
+ * recognise the 403 that a missing mailbox scoping policy produces.
+ */
+export async function graphFetch(
+  url: string,
+  init?: RequestInit
+): Promise<Response> {
+  const token = await getToken();
+  return fetch(url, {
+    ...init,
+    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
 }
 
 export interface LinkedFile {

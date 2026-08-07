@@ -45,6 +45,11 @@ export async function GET(request: Request) {
     .from("call_logs")
     .select("id, client_id, staff_id, pbx_call_id, caller_ext, callee, attempt, placed_at, clients(name, phone), staff(full_name)")
     .eq("status", "placed")
+    // Only calls this CRM placed. The CDR sync now also writes call_logs rows
+    // for calls observed on the PBX; without this guard those would be read as
+    // unresolved click-to-calls and would trigger alerts, retries and
+    // automated WhatsApp messages to clients who were never called from here.
+    .eq("source", "crm")
     .lt("placed_at", cutoff)
     .gt("placed_at", floor)
     .limit(200);

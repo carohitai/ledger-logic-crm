@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { matchClientByPhone } from "@/lib/match";
 
 // Receives inbound WhatsApp messages pushed by Nextel.
 // The exact payload schema isn't documented to us, so this endpoint stores the
@@ -57,17 +58,11 @@ export async function POST(request: Request) {
     auth: { persistSession: false },
   });
 
-  // Match a client by the last 10 digits of the sender's number.
-  let clientId: string | null = null;
-  if (from.length >= 10) {
-    const last10 = from.slice(-10);
-    const { data: match } = await db
-      .from("clients")
-      .select("id, phone")
-      .ilike("phone", `%${last10}%`)
-      .limit(2);
-    if (match?.length === 1) clientId = match[0].id;
-  }
+  // Match the sender to a client via client_contacts. This replaces an inline
+  // ilike over clients.phone, which missed every client whose phone column
+  // holds more than one number ("7507916399/8600710653") or carries a name
+  // alongside it ("8097629472 (Rakesh Khandare)").
+  const clientId = await matchClientByPhone(db, from);
 
   await db.from("whatsapp_messages").insert({
     client_id: clientId,
