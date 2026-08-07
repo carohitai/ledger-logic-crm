@@ -5,7 +5,6 @@
       "schedule": "0 4 * * *"
     },
     {
-      "comment": "Daily because Vercel's Hobby plan permits only once-a-day crons. /api/cron/tick decides internally what is due, so raising this to */15 on Pro needs no other change. 01:30 UTC is 07:00 IST — tasks are generated before the working day starts.",
       "path": "/api/cron/tick",
       "schedule": "30 1 * * *"
     }

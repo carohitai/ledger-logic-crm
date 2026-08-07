@@ -81,7 +81,8 @@ Mailboxes are then managed at `/admin/mailboxes` — no redeploy to add one.
 internally what is due. This keeps the cron-entry count within Vercel's
 per-plan limit and means new jobs need no `vercel.json` change.
 
-It is scheduled **daily** (`30 1 * * *` UTC = 07:00 IST) because Vercel's Hobby
+It is scheduled **daily** (`30 1 * * *` UTC = 07:00 IST, so tasks are generated
+before the working day starts) because Vercel's Hobby
 plan permits only one cron firing per day. On Pro, raise it to `*/15 * * * *`
 and nothing else changes — mail and call sync then pick up near-real-time,
 while task generation stays once a day. Daily jobs are gated on "has this
