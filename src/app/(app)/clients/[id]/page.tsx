@@ -7,7 +7,8 @@ import { SubmitButton } from "@/components/button";
 import { BackLink } from "@/components/back-link";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { EditIconLink } from "@/components/edit-link";
-import { WA_TEMPLATES } from "@/lib/whatsapp-templates";
+import { ClientTimeline } from "@/components/client-timeline";
+import { COMMUNICATION_COLUMNS, type CommunicationItem } from "@/lib/inbox/types";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
 
@@ -18,25 +19,6 @@ const cardStyle = {
   boxShadow: "var(--shadow-sm)",
 } as const;
 
-const CALL_PILL: Record<string, { label: string; bg: string; fg: string }> = {
-  answered: { label: "Answered", bg: "var(--brand-green-pale)", fg: "var(--earth-moss)" },
-  placed: { label: "Call placed", bg: "var(--brand-green-pale)", fg: "var(--earth-moss)" },
-  unanswered: { label: "No answer", bg: "rgba(201,154,78,0.15)", fg: "#8F6A2E" },
-  scheduled: { label: "Callback scheduled", bg: "var(--brand-blue-pale)", fg: "var(--brand-blue-deep)" },
-  abandoned: { label: "No CDR match", bg: "var(--paper-3)", fg: "var(--ink-500)" },
-};
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default async function ClientDetailPage({
   params,
 }: {
@@ -45,25 +27,23 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: client }, { data: allotments }, { data: messages }, { data: calls }, { data: me }] =
+  const [{ data: client }, { data: allotments }, { data: timeline }, { data: me }] =
     await Promise.all([
       supabase.from("clients").select("*").eq("id", id).maybeSingle(),
       supabase
         .from("client_allotments")
         .select("role, source, staff:staff_id (id, full_name, is_active)")
         .eq("client_id", id),
+      // One ordered stream across mail, WhatsApp and calls. The view carries no
+      // join to staff — PostgREST cannot embed relations through a view — so
+      // names are resolved separately below.
       supabase
-        .from("whatsapp_messages")
-        .select("id, direction, body, template_id, status, created_at")
+        .from("communications")
+        .select(COMMUNICATION_COLUMNS)
         .eq("client_id", id)
-        .order("created_at", { ascending: false })
-        .limit(200),
-      supabase
-        .from("call_logs")
-        .select("id, status, placed_at, staff:staff_id (full_name)")
-        .eq("client_id", id)
-        .order("placed_at", { ascending: false })
-        .limit(50),
+        .order("occurred_at", { ascending: false })
+        .limit(200)
+        .returns<CommunicationItem[]>(),
       supabase.auth.getUser().then(async ({ data: { user } }) =>
         supabase
           .from("staff")
@@ -133,10 +113,18 @@ export default async function ClientDetailPage({
   ];
 
   const contact = { id: client.id, name: client.name, phone: client.phone };
-  const templateLabel = (tid: string | null) =>
-    WA_TEMPLATES.find((t) => t.key === tid)?.label ??
-    (tid === "call_back_work" ? "Callback request" : null);
-  const outgoing = (messages ?? []).filter((m) => m.direction === "out");
+  const items = timeline ?? [];
+
+  // Resolve the staff names the timeline references, in one query.
+  const staffIds = [...new Set(items.map((i) => i.staff_id).filter(Boolean))] as string[];
+  const { data: timelineStaff } = staffIds.length
+    ? await supabase.from("staff").select("id, full_name").in("id", staffIds)
+    : { data: null };
+  const staffNames = new Map(
+    (timelineStaff ?? []).map((s) => [s.id as string, s.full_name as string])
+  );
+
+  const countBy = (channel: string) => items.filter((i) => i.channel === channel).length;
 
   const FIELD_LABEL = "mb-[5px] text-[10.5px] font-bold uppercase";
   const FIELD_LABEL_STYLE = { letterSpacing: "0.1em", color: "var(--ink-400)" } as const;
@@ -200,106 +188,32 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      {/* Calls + WhatsApp */}
-      <div className="grid items-start gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <div className="overflow-hidden" style={cardStyle}>
-          <div className="flex items-baseline justify-between px-[22px] pb-3 pt-[18px]">
-            <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
-              Calls done
-            </h3>
-            <span
-              className="px-2.5 py-[2px] text-[11px] font-semibold"
-              style={{ borderRadius: "var(--radius-pill)", background: "var(--brand-green-pale)", color: "var(--earth-moss)" }}
-            >
-              {(calls ?? []).length}
-            </span>
-          </div>
-          {!(calls ?? []).length ? (
-            <p className="px-[22px] pb-5 text-sm" style={{ color: "var(--ink-400)" }}>
-              No calls logged for this client yet.
-            </p>
-          ) : (
-            <ul className="m-0 list-none p-0">
-              {(calls ?? []).map((k) => {
-                const pill = CALL_PILL[k.status] ?? { label: k.status, bg: "var(--paper-3)", fg: "var(--ink-500)" };
-                const staff = k.staff as unknown as { full_name: string } | null;
-                return (
-                  <li
-                    key={k.id}
-                    className="flex items-center gap-3 px-[22px] py-3 text-[13px]"
-                    style={{ borderTop: "1px solid var(--ink-100)" }}
-                  >
-                    <span
-                      className="shrink-0 px-[11px] py-[3px] text-[11px] font-semibold"
-                      style={{ borderRadius: "var(--radius-pill)", background: pill.bg, color: pill.fg }}
-                    >
-                      {pill.label}
-                    </span>
-                    <span style={{ color: "var(--ink-700)" }}>by {staff?.full_name ?? "—"}</span>
-                    <span className="ml-auto whitespace-nowrap text-[11.5px] tabular-nums" style={{ color: "var(--ink-400)" }}>
-                      {k.placed_at ? fmtTime(k.placed_at) : "queued"}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+      {/* Unified communication timeline */}
+      <div className="overflow-hidden" style={cardStyle}>
+        <div className="flex flex-wrap items-baseline gap-3 px-[22px] pb-3 pt-[18px]">
+          <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+            Communication
+          </h3>
+          <span className="text-[11.5px]" style={{ color: "var(--ink-400)" }}>
+            Outlook mail, WhatsApp and calls in one stream
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            {([
+              ["Email", countBy("email"), "var(--brand-blue-pale)", "var(--brand-blue-deep)"],
+              ["WhatsApp", countBy("whatsapp"), "var(--brand-green-pale)", "var(--earth-moss)"],
+              ["Calls", countBy("call"), "rgba(201,154,78,0.15)", "#8F6A2E"],
+            ] as const).map(([label, count, bg, fg]) => (
+              <span
+                key={label}
+                className="px-2.5 py-[2px] text-[11px] font-semibold"
+                style={{ borderRadius: "var(--radius-pill)", background: bg, color: fg }}
+              >
+                {count} {label}
+              </span>
+            ))}
+          </span>
         </div>
-
-        <div className="overflow-hidden" style={cardStyle}>
-          <div className="flex items-baseline justify-between px-[22px] pb-3 pt-[18px]">
-            <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
-              WhatsApp messages sent
-            </h3>
-            <span
-              className="px-2.5 py-[2px] text-[11px] font-semibold"
-              style={{ borderRadius: "var(--radius-pill)", background: "var(--brand-blue-pale)", color: "var(--brand-blue-deep)" }}
-            >
-              {outgoing.length}
-            </span>
-          </div>
-          {!(messages ?? []).length ? (
-            <p className="px-[22px] pb-5 text-sm" style={{ color: "var(--ink-400)" }}>
-              No WhatsApp messages with this client yet. Outgoing follow-ups and
-              the client&apos;s replies will appear here.
-            </p>
-          ) : (
-            <ul className="m-0 max-h-[420px] list-none overflow-y-auto p-0">
-              {(messages ?? []).map((m) => {
-                const out = m.direction === "out";
-                return (
-                  <li key={m.id} className="px-[22px] py-3.5" style={{ borderTop: "1px solid var(--ink-100)" }}>
-                    <div className="flex items-center gap-2.5">
-                      <span className="inline-flex h-4 w-4" style={{ color: out ? "#25D366" : "var(--ink-400)" }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M17.6 6.32A7.85 7.85 0 0 0 12 4a7.94 7.94 0 0 0-6.9 11.9L4 20l4.2-1.1a7.9 7.9 0 0 0 3.8 1h.01a7.94 7.94 0 0 0 5.59-13.58zM12 18.5a6.5 6.5 0 0 1-3.3-.9l-.24-.14-2.45.64.65-2.39-.16-.25A6.5 6.5 0 1 1 12 18.5z" />
-                        </svg>
-                      </span>
-                      <span className="text-[12.5px] font-bold" style={{ color: "var(--ink-900)" }}>
-                        {out ? (templateLabel(m.template_id) ?? "Message sent") : "Client reply"}
-                      </span>
-                      <span className="ml-auto whitespace-nowrap text-[11.5px] tabular-nums" style={{ color: "var(--ink-400)" }}>
-                        {fmtTime(m.created_at)}
-                      </span>
-                    </div>
-                    <p
-                      className="m-0 mt-2 whitespace-pre-wrap px-3 py-2.5 text-[12.5px] leading-relaxed"
-                      style={{
-                        color: "var(--ink-700)",
-                        background: out ? "var(--brand-green-pale)" : "var(--paper-2)",
-                        borderRadius: out
-                          ? "var(--radius-md) var(--radius-md) var(--radius-md) 2px"
-                          : "var(--radius-md) var(--radius-md) 2px var(--radius-md)",
-                      }}
-                    >
-                      {m.body ?? "(no text)"}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+        <ClientTimeline items={items} staffNames={staffNames} />
       </div>
 
       {/* Details + admin allotment editing */}
