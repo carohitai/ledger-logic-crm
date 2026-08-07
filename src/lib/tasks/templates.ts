@@ -250,9 +250,9 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
     assignRole: "accounts",
     // `books` is a category, not a yes/no: "BM …" means the firm maintains the
     // books, "NB …" means it does not, and External/NA/Pension are neither.
-    // Only BM clients generate a monthly close — keying off "is books set at
-    // all" would raise a monthly task for all 934 clients, including the 461
-    // whose books we explicitly do not keep.
+    // (Confirmed with the firm.) Only BM clients generate a monthly close —
+    // keying off "is books set at all" would raise a monthly task for all 934
+    // clients, including the 461 whose books we explicitly do not keep.
     appliesWhen: { startsWith: { books: ["BM"] } },
     isActive: true,
     sortOrder: 50,
