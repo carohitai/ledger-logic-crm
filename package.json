@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:dates": "node --experimental-strip-types --no-warnings src/lib/tasks/periods.test.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

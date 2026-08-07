@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ComplianceStrip } from "@/components/compliance-strip";
+import { complianceCounts } from "@/lib/tasks/counts";
 import { DashboardView, type AlertItem, type StaffStat } from "./dashboard-view";
 import { UserDashboardView, type FollowUp, type UserAlert } from "./user-dashboard-view";
 
@@ -66,7 +68,11 @@ export default async function DashboardPage() {
         supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "active").then((r) => r.count ?? 0),
         supabase.from("call_logs").select("client_id"),
       ]);
-    const contactedClients = new Set((contactedRows ?? []).map((r) => r.client_id)).size;
+    // call_logs.client_id is nullable now that the CDR sync ingests calls from
+    // numbers we cannot attribute; a null would otherwise count as a client.
+    const contactedClients = new Set(
+      (contactedRows ?? []).map((r) => r.client_id).filter(Boolean)
+    ).size;
 
     const stats: StaffStat[] = (statsRaw ?? []).map((s) => ({
       id: s.id,
@@ -91,7 +97,11 @@ export default async function DashboardPage() {
       time: fmtTime(a.created_at),
     }));
 
+    const counts = await complianceCounts(supabase, { includeUnmatched: true });
+
     return (
+      <>
+      <ComplianceStrip counts={counts} />
       <DashboardView
         title="Team Dashboard"
         todayLabel={todayLabel}
@@ -105,6 +115,7 @@ export default async function DashboardPage() {
         isAdmin
         ack={acknowledge}
       />
+      </>
     );
   }
 
@@ -134,6 +145,7 @@ export default async function DashboardPage() {
   };
   const latestByClient = new Map<string, { status: string; whatsapp_sent: boolean }>();
   for (const c of myCalls ?? []) {
+    if (!c.client_id) continue; // unattributed CDR call — no client to key on
     if (!latestByClient.has(c.client_id)) {
       latestByClient.set(c.client_id, { status: c.status, whatsapp_sent: c.whatsapp_sent });
     }
@@ -182,7 +194,11 @@ export default async function DashboardPage() {
       escalation: a.type === "escalation",
     }));
 
+  const counts = await complianceCounts(supabase, { staffId });
+
   return (
+    <>
+    <ComplianceStrip counts={counts} showUnmatched={false} />
     <UserDashboardView
       firstName={(me?.full_name ?? "").replace(/^(CA|CS|Adv)\s+/i, "").split(/\s+/)[0] || "there"}
       todayLabel={todayLabel}
@@ -200,5 +216,6 @@ export default async function DashboardPage() {
       alerts={alerts}
       ack={acknowledge}
     />
+    </>
   );
 }

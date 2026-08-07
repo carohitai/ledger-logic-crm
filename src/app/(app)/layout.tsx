@@ -55,6 +55,8 @@ export default async function AppLayout({
           <NavLink href="/dashboard">Dashboard</NavLink>
           <NavLink href="/my-clients">My Clients</NavLink>
           <NavLink href="/clients">All Clients</NavLink>
+          <NavLink href="/inbox">Inbox</NavLink>
+          <NavLink href="/tasks">Tasks</NavLink>
           {(isAdmin || me?.app_role === "partner") && (
             <>
               <NavLink href="/reports">Reports</NavLink>
@@ -65,6 +67,7 @@ export default async function AppLayout({
             <>
               <NavLink href="/admin/import">Import</NavLink>
               <NavLink href="/admin/staff">Staff</NavLink>
+              <NavLink href="/admin/mailboxes">Mailboxes</NavLink>
             </>
           )}
           <span className="ml-auto flex items-center gap-2.5">
