@@ -43,6 +43,27 @@ export function yeastarConfigured(): boolean {
 }
 
 /**
+ * TLS failures Node surfaces as an error `cause.code`. These are worth naming
+ * separately because the generic "check YEASTAR_API_URL" advice actively sends
+ * you after the wrong thing — the URL is fine, the PBX's certificate is not.
+ * An expired cert on the PBX has caused a real outage on this integration.
+ */
+const TLS_CAUSES: Record<string, string> = {
+  CERT_HAS_EXPIRED:
+    "the PBX's TLS certificate has EXPIRED — renew it on the PBX (Security → Certificates); nothing needs changing here",
+  CERT_NOT_YET_VALID:
+    "the PBX's TLS certificate is not valid yet — check the PBX's system clock and the certificate's start date",
+  ERR_TLS_CERT_ALTNAME_INVALID:
+    "the PBX's TLS certificate does not cover this hostname — reissue it for the host in YEASTAR_API_URL",
+  DEPTH_ZERO_SELF_SIGNED_CERT:
+    "the PBX is presenting a self-signed certificate — install a publicly trusted one",
+  SELF_SIGNED_CERT_IN_CHAIN:
+    "the PBX's certificate chain is self-signed — install the full trusted chain on the PBX",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE:
+    "the PBX's certificate chain is incomplete — install the intermediate certificate on the PBX",
+};
+
+/**
  * Fetch against the PBX with a timeout, surfacing network-level failures as a
  * readable error naming the host and cause (DNS, refused, timeout, TLS…)
  * instead of undici's bare "fetch failed".
@@ -57,12 +78,21 @@ async function pbxFetch(pathAndQuery: string, init?: RequestInit): Promise<Recor
       signal: AbortSignal.timeout(8000),
     });
   } catch (e) {
+    const code = (e as { cause?: { code?: string } }).cause?.code;
+    const host = new URL(url).host;
+
+    // A certificate problem is not a connectivity or configuration problem, and
+    // saying "check YEASTAR_API_URL" for one wastes the reader's time.
+    if (code && TLS_CAUSES[code]) {
+      throw new Error(`PBX TLS error at ${host}: ${TLS_CAUSES[code]} (${code}).`);
+    }
+
     const cause =
-      (e as { cause?: { code?: string; message?: string } }).cause?.code ??
-      (e as { cause?: { code?: string; message?: string } }).cause?.message ??
+      code ??
+      (e as { cause?: { message?: string } }).cause?.message ??
       (e instanceof Error ? e.name === "TimeoutError" ? "timed out after 8s" : e.message : String(e));
     throw new Error(
-      `Could not reach the PBX at ${new URL(url).host} (${cause}). Check YEASTAR_API_URL.`
+      `Could not reach the PBX at ${host} (${cause}). Check YEASTAR_API_URL.`
     );
   }
   try {
@@ -103,7 +133,11 @@ export async function probeYeastar(): Promise<{
   env: Record<string, boolean | string | null>;
   ok: boolean;
   error?: string;
+  /** Lets a caller tell "the cert is bad" apart from "the URL is wrong". */
+  category?: "config" | "tls" | "auth" | "network";
+  checkedAt: string;
 }> {
+  const checkedAt = new Date().toISOString();
   const env = {
     YEASTAR_API_URL: Boolean(process.env.YEASTAR_API_URL),
     YEASTAR_PBX_DOMAIN: Boolean(process.env.YEASTAR_PBX_DOMAIN),
@@ -115,17 +149,23 @@ export async function probeYeastar(): Promise<{
   try {
     apiHost = API_URL ? new URL(API_URL).host : null;
   } catch {
-    return { configured: false, apiHost: API_URL ?? null, env, ok: false, error: "YEASTAR_API_URL is not a valid URL" };
+    return { configured: false, apiHost: API_URL ?? null, env, ok: false, error: "YEASTAR_API_URL is not a valid URL", category: "config", checkedAt };
   }
   if (!yeastarConfigured()) {
-    return { configured: false, apiHost, env, ok: false, error: "Missing YEASTAR_API_URL / YEASTAR_CLIENT_ID / YEASTAR_CLIENT_SECRET" };
+    return { configured: false, apiHost, env, ok: false, error: "Missing YEASTAR_API_URL / YEASTAR_CLIENT_ID / YEASTAR_CLIENT_SECRET", category: "config", checkedAt };
   }
   try {
     cached = null; // force a live round-trip
     await getToken();
-    return { configured: true, apiHost, env, ok: true };
+    return { configured: true, apiHost, env, ok: true, checkedAt };
   } catch (e) {
-    return { configured: true, apiHost, env, ok: false, error: e instanceof Error ? e.message : String(e) };
+    const error = e instanceof Error ? e.message : String(e);
+    const category: "tls" | "auth" | "network" = error.startsWith("PBX TLS error")
+      ? "tls"
+      : error.includes("auth failed")
+        ? "auth"
+        : "network";
+    return { configured: true, apiHost, env, ok: false, error, category, checkedAt };
   }
 }
 
