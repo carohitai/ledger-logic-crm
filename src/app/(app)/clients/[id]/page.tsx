@@ -8,6 +8,13 @@ import { BackLink } from "@/components/back-link";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { EditIconLink } from "@/components/edit-link";
 import { WA_TEMPLATES } from "@/lib/whatsapp-templates";
+import { AppLink } from "@/components/nav-progress";
+import { complianceConfigured, providerName } from "@/lib/compliance/provider";
+import { istToday, periodLabel } from "@/lib/compliance/periods";
+import { isOverdue, kindLabel } from "@/lib/tasks";
+import { TaskStatusBadge, PriorityBadge } from "../../tasks/task-badges";
+import { StatusActions } from "../../tasks/task-controls";
+import { SyncPanel } from "../../tasks/sync-panel";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
 
@@ -45,7 +52,7 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: client }, { data: allotments }, { data: messages }, { data: calls }, { data: me }] =
+  const [{ data: client }, { data: allotments }, { data: messages }, { data: calls }, { data: me }, { data: tasks }] =
     await Promise.all([
       supabase.from("clients").select("*").eq("id", id).maybeSingle(),
       supabase
@@ -71,6 +78,13 @@ export default async function ClientDetailPage({
           .eq("auth_user_id", user!.id)
           .maybeSingle()
       ),
+      supabase
+        .from("tasks")
+        .select("id, title, details, kind, source, period, due_date, priority, status, assignee:assignee_staff_id (full_name)")
+        .eq("client_id", id)
+        .order("status")
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(50),
     ]);
 
   if (!client) notFound();
@@ -138,6 +152,17 @@ export default async function ClientDetailPage({
     (tid === "call_back_work" ? "Callback request" : null);
   const outgoing = (messages ?? []).filter((m) => m.direction === "out");
 
+  const today = istToday();
+  const sortedTasks = [...(tasks ?? [])].sort((a, b) => {
+    // Open work first, then by due date (already ordered within groups).
+    const openA = a.status === "open" || a.status === "in_progress" ? 0 : 1;
+    const openB = b.status === "open" || b.status === "in_progress" ? 0 : 1;
+    return openA - openB;
+  });
+  const openTaskCount = sortedTasks.filter(
+    (t) => t.status === "open" || t.status === "in_progress"
+  ).length;
+
   const FIELD_LABEL = "mb-[5px] text-[10.5px] font-bold uppercase";
   const FIELD_LABEL_STYLE = { letterSpacing: "0.1em", color: "var(--ink-400)" } as const;
 
@@ -198,6 +223,93 @@ export default async function ClientDetailPage({
             )
           )}
         </div>
+      </div>
+
+      {/* Compliance tasks */}
+      <div className="overflow-hidden" style={cardStyle}>
+        <div className="flex items-baseline justify-between px-[22px] pb-3 pt-[18px]">
+          <h3 className="m-0 text-[13px] font-semibold" style={{ color: "var(--ink-700)" }}>
+            Compliance tasks
+          </h3>
+          <span className="flex items-center gap-2.5">
+            <span
+              className="px-2.5 py-[2px] text-[11px] font-semibold"
+              style={{
+                borderRadius: "var(--radius-pill)",
+                background: openTaskCount ? "var(--brand-blue-pale)" : "var(--paper-3)",
+                color: openTaskCount ? "var(--brand-blue-deep)" : "var(--ink-500)",
+              }}
+            >
+              {openTaskCount} open
+            </span>
+            <AppLink
+              href="/tasks"
+              inlineSpinner
+              className="text-[11.5px] font-semibold no-underline"
+              style={{ color: "var(--brand-blue)" }}
+            >
+              All tasks →
+            </AppLink>
+          </span>
+        </div>
+        {(client.pan || client.gstin) && (
+          <div className="px-[22px] pb-3">
+            <SyncPanel
+              clientId={id}
+              configured={complianceConfigured()}
+              provider={providerName()}
+              compact
+            />
+          </div>
+        )}
+        {!sortedTasks.length ? (
+          <p className="px-[22px] pb-5 text-sm" style={{ color: "var(--ink-400)" }}>
+            No tasks for this client yet.
+            {client.pan || client.gstin
+              ? " Use Refresh from PAN / GST above to check for pending compliance."
+              : " Add a PAN or GSTIN on the profile to enable auto-generated compliance checks."}
+          </p>
+        ) : (
+          <ul className="m-0 list-none p-0">
+            {sortedTasks.map((t) => {
+              const overdue = isOverdue(t, today);
+              return (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center gap-3 px-[22px] py-3 text-[13px]"
+                  style={{ borderTop: "1px solid var(--ink-100)" }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold" style={{ color: "var(--ink-900)" }}>
+                      {t.title}
+                    </div>
+                    <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--ink-400)" }}>
+                      {kindLabel(t.kind)}
+                      {t.period ? ` · ${periodLabel(t.period)}` : ""}
+                      {t.due_date && (
+                        <>
+                          {" · due "}
+                          <span style={{ color: overdue ? "var(--danger)" : undefined }}>
+                            {t.due_date.split("-").reverse().join("-")}
+                            {overdue && " (overdue)"}
+                          </span>
+                        </>
+                      )}
+                      {(() => {
+                        const a = t.assignee as { full_name?: string } | { full_name?: string }[] | null;
+                        const name = Array.isArray(a) ? a[0]?.full_name : a?.full_name;
+                        return name ? ` · ${name}` : "";
+                      })()}
+                    </div>
+                  </div>
+                  <PriorityBadge priority={t.priority} />
+                  <TaskStatusBadge status={t.status} />
+                  <StatusActions taskId={t.id} status={t.status} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       {/* Calls + WhatsApp */}
