@@ -75,12 +75,14 @@ export interface LinkedFile {
   webUrl: string;
   lastModified: string;
   size: number;
+  /** Changes whenever the workbook's content changes — the sync cron's change detector. */
+  eTag: string | null;
 }
 
 export async function getClientListMetadata(): Promise<LinkedFile> {
   const token = await getToken();
   const res = await graphGet(
-    `${itemUrl()}?$select=name,webUrl,lastModifiedDateTime,size`,
+    `${itemUrl()}?$select=name,webUrl,lastModifiedDateTime,size,cTag,eTag`,
     token
   );
   const json = (await res.json()) as {
@@ -88,12 +90,15 @@ export async function getClientListMetadata(): Promise<LinkedFile> {
     webUrl: string;
     lastModifiedDateTime: string;
     size: number;
+    cTag?: string;
+    eTag?: string;
   };
   return {
     name: json.name,
     webUrl: json.webUrl,
     lastModified: json.lastModifiedDateTime,
     size: json.size,
+    eTag: json.cTag ?? json.eTag ?? null,
   };
 }
 

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import type { LinkStatus } from "@/lib/graph";
+import { labelFor } from "@/lib/client-profile";
 import { SubmitButton } from "@/components/button";
 import { runImport, type ImportState } from "./actions";
 
@@ -173,6 +174,13 @@ function ReportTable({
               <td className="px-3 py-2 font-medium">{x.clientName}</td>
               <td className="px-3 py-2">{x.action}</td>
               <td className="px-3 py-2 text-slate-600">
+                {x.diff &&
+                  Object.entries(x.diff).map(([key, d]) => (
+                    <div key={key}>
+                      <span className="font-medium text-slate-800">{labelFor(key)}</span>:{" "}
+                      <span className="text-slate-400">{String(d.from ?? "—")}</span> → {String(d.to ?? "—")}
+                    </div>
+                  ))}
                 {x.messages.map((m, i) => (
                   <div key={i}>{m}</div>
                 ))}

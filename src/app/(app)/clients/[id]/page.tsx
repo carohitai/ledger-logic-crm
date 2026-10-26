@@ -8,6 +8,9 @@ import { BackLink } from "@/components/back-link";
 import { CallIconButton, WhatsAppIconButton } from "@/components/contact-actions";
 import { EditIconLink } from "@/components/edit-link";
 import { WA_TEMPLATES } from "@/lib/whatsapp-templates";
+import { changeSummary, type ChangeSet } from "@/lib/client-profile";
+import { queueChangeNotice } from "@/lib/notify/queue";
+import { TeamsCard } from "./teams-card";
 
 const ROLES = Object.keys(ROLE_LABELS) as AllotmentRole[];
 
@@ -97,6 +100,18 @@ export default async function ClientDetailPage({
   async function saveAllotments(formData: FormData) {
     "use server";
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: actor } = await supabase
+      .from("staff")
+      .select("id, full_name")
+      .eq("auth_user_id", user!.id)
+      .maybeSingle();
+    const { data: staffRows } = await supabase.from("staff").select("id, full_name");
+    const staffName = new Map((staffRows ?? []).map((s) => [s.id as string, s.full_name as string]));
+
+    const changes: ChangeSet = {};
     for (const role of ROLES) {
       const staffId = String(formData.get(role) ?? "");
       const current = byRole.get(role);
@@ -117,6 +132,31 @@ export default async function ClientDetailPage({
           source: "manual",
         });
       }
+      changes[`incharge.${role}`] = {
+        from: currentId ? staffName.get(currentId) ?? currentId : null,
+        to: staffId ? staffName.get(staffId) ?? staffId : null,
+      };
+    }
+
+    if (Object.keys(changes).length) {
+      const { data: activity } = await supabase
+        .from("client_activity")
+        .insert({
+          client_id: id,
+          actor_staff_id: actor?.id ?? null,
+          action: "allotment_change",
+          summary: changeSummary(changes),
+          changes,
+        })
+        .select("id")
+        .maybeSingle();
+      queueChangeNotice({
+        clientId: id,
+        activityId: activity?.id ?? null,
+        kind: "allotment_change",
+        changes,
+        actorName: actor?.full_name ?? user?.email ?? "A team member",
+      });
     }
     revalidatePath(`/clients/${id}`);
   }
@@ -319,6 +359,17 @@ export default async function ClientDetailPage({
             ))}
           </dl>
         </section>
+
+        <TeamsCard
+          clientId={id}
+          clientName={client.name}
+          tradeName={client.trade_name}
+          teamId={client.teams_team_id ?? null}
+          channelId={client.teams_channel_id ?? null}
+          teamName={client.teams_team_name ?? null}
+          periskopeChatId={client.periskope_chat_id ?? null}
+          isAdmin={isAdmin}
+        />
 
         {isAdmin && staffList && (
           <section className="px-6 py-[22px]" style={cardStyle}>

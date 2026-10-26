@@ -27,6 +27,10 @@ const ACTION_LABEL: Record<string, string> = {
   created: "added",
   updated: "updated",
   bulk_message: "sent a bulk message",
+  allotment_change: "re-allotted",
+  sheet_insert: "added",
+  sheet_update: "changed",
+  sheet_missing: "dropped",
 };
 
 function timeAgo(iso: string): string {

@@ -2,9 +2,12 @@ import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type AllotmentRole,
+  type ClientFields,
   type NormalizedRow,
+  ROLE_COLUMNS,
   normalizeRow,
 } from "./normalize";
+import { changeSummary, type ChangeSet } from "@/lib/client-profile";
 
 export type RowAction =
   | "insert"
@@ -21,7 +24,17 @@ export interface RowResult {
   importKey: string;
   clientId: string | null;
   messages: string[];
-  diff: Record<string, { from: unknown; to: unknown }> | null;
+  /** Field + incharge changes the sheet made (updates only). Keys: column names and `incharge.<role>`. */
+  diff: ChangeSet | null;
+}
+
+/** A committed change worth telling the team about. */
+export interface SyncActivity {
+  clientId: string;
+  clientName: string;
+  activityId: string | null;
+  action: "sheet_insert" | "sheet_update" | "sheet_missing";
+  changes: ChangeSet;
 }
 
 export interface SyncReport {
@@ -31,17 +44,35 @@ export interface SyncReport {
   missingFlagged: number;
   unresolvedAliases: Record<string, number>;
   rows: RowResult[];
+  /** Only populated on commit: one entry per client that changed. */
+  activities: SyncActivity[];
 }
 
-interface ExistingClient {
+type ExistingClient = ClientFields & {
   id: string;
   import_key: string;
-  pan: string | null;
   row_hash: string | null;
   status: string;
   /** Columns hand-edited in the CRM — the sheet must not overwrite these. */
   manual_fields: string[] | null;
-}
+};
+
+const FIELD_KEYS = [
+  "name",
+  "constitution",
+  "trade_name",
+  "pan",
+  "gstin",
+  "gst_status",
+  "category",
+  "books",
+  "it_category",
+  "gst_frequency",
+  "phone",
+  "email",
+] as const satisfies readonly (keyof ClientFields)[];
+
+const ROLES = Object.keys(ROLE_COLUMNS) as AllotmentRole[];
 
 function rowHash(row: NormalizedRow, allotments: Record<string, string>): string {
   return createHash("sha256")
@@ -61,37 +92,57 @@ async function chunked<T>(items: T[], fn: (slice: T[]) => Promise<void>) {
  * Runs the full import pipeline. Dry-run and commit share every step up to
  * the write phase; dry-run persists only the batch + row report.
  * `applyRenames`: rename_candidates are only applied when explicitly confirmed.
+ * `actorStaffId`: who triggered it (null for the automated cron).
  */
 export async function runSync(
   supabase: SupabaseClient,
   records: Record<string, string>[],
-  opts: { filename: string; dryRun: boolean; applyRenames: boolean }
+  opts: { filename: string; dryRun: boolean; applyRenames: boolean; actorStaffId?: string | null }
 ): Promise<SyncReport> {
   // --- load reference data ---
-  const [{ data: aliases, error: aliasErr }, { data: existing, error: cliErr }] =
-    await Promise.all([
-      supabase.from("staff_aliases").select("alias, staff_id"),
-      supabase
-        .from("clients")
-        .select("id, import_key, pan, row_hash, status, manual_fields")
-        .limit(100000),
-    ]);
+  const [
+    { data: aliases, error: aliasErr },
+    { data: existing, error: cliErr },
+    { data: staff, error: staffErr },
+    { data: importAllotments, error: allotErr },
+  ] = await Promise.all([
+    supabase.from("staff_aliases").select("alias, staff_id"),
+    supabase
+      .from("clients")
+      .select(`id, import_key, row_hash, status, manual_fields, ${FIELD_KEYS.join(", ")}`)
+      .limit(100000),
+    supabase.from("staff").select("id, full_name"),
+    supabase
+      .from("client_allotments")
+      .select("client_id, role, staff_id")
+      .eq("source", "import")
+      .limit(100000),
+  ]);
   if (aliasErr) throw aliasErr;
   if (cliErr) throw cliErr;
+  if (staffErr) throw staffErr;
+  if (allotErr) throw allotErr;
 
   const aliasMap = new Map<string, string>(
     (aliases ?? []).map((a) => [a.alias.toUpperCase(), a.staff_id])
   );
-  const byKey = new Map<string, ExistingClient>(
-    (existing ?? []).map((c) => [c.import_key, c])
-  );
+  const staffName = new Map<string, string>((staff ?? []).map((s) => [s.id, s.full_name]));
+  const existingRows = (existing ?? []) as unknown as ExistingClient[];
+  const byKey = new Map<string, ExistingClient>(existingRows.map((c) => [c.import_key, c]));
   const byPan = new Map<string, ExistingClient[]>();
-  for (const c of existing ?? []) {
+  for (const c of existingRows) {
     if (c.pan) {
       const list = byPan.get(c.pan) ?? [];
       list.push(c);
       byPan.set(c.pan, list);
     }
+  }
+  /** client_id -> role -> staff_id, for import-sourced allotments only. */
+  const currentAllotments = new Map<string, Record<string, string>>();
+  for (const a of importAllotments ?? []) {
+    const entry = currentAllotments.get(a.client_id) ?? {};
+    entry[a.role] = a.staff_id;
+    currentAllotments.set(a.client_id, entry);
   }
 
   // --- normalize ---
@@ -113,8 +164,33 @@ export async function runSync(
     allotments: Record<string, string>; // role -> staff_id
     hash: string;
     messages: string[];
+    diff: ChangeSet | null;
   }
   const planned: PlannedRow[] = [];
+
+  /** What the sheet would change on an existing client, honouring CRM-edited fields. */
+  const diffAgainst = (client: ExistingClient, row: NormalizedRow, allotments: Record<string, string>): ChangeSet => {
+    const manual = new Set(client.manual_fields ?? []);
+    const diff: ChangeSet = {};
+    for (const key of FIELD_KEYS) {
+      if (manual.has(key)) continue;
+      const before = client[key] ?? null;
+      const after = row.fields[key] ?? null;
+      if (before !== after) diff[key] = { from: before, to: after };
+    }
+    const before = currentAllotments.get(client.id) ?? {};
+    for (const role of ROLES) {
+      const b = before[role] ?? null;
+      const a = allotments[role] ?? null;
+      if (b !== a) {
+        diff[`incharge.${role}`] = {
+          from: b ? staffName.get(b) ?? b : null,
+          to: a ? staffName.get(a) ?? a : null,
+        };
+      }
+    }
+    return diff;
+  };
 
   for (const row of rows) {
     const messages = [...row.messages];
@@ -141,6 +217,7 @@ export async function runSync(
         allotments,
         hash,
         messages: [...messages, `Duplicate key in sheet: ${row.importKey}`],
+        diff: null,
       });
       continue;
     }
@@ -150,13 +227,18 @@ export async function runSync(
     const exact = byKey.get(row.importKey);
     if (exact && !claimedClientIds.has(exact.id)) {
       claimedClientIds.add(exact.id);
+      const diff = diffAgainst(exact, row, allotments);
+      const changed = Object.keys(diff).length > 0 || exact.status !== "active";
+      // A hash change with an empty diff means only CRM-protected fields moved
+      // in the sheet — nothing to apply, just re-stamp the hash below.
       planned.push({
         row,
-        action: exact.row_hash === hash && exact.status === "active" ? "unchanged" : "update",
+        action: changed ? "update" : "unchanged",
         client: exact,
         allotments,
         hash,
         messages,
+        diff: changed ? diff : null,
       });
       continue;
     }
@@ -178,24 +260,26 @@ export async function runSync(
           ...messages,
           `Existing client ${c.import_key} appears renamed to ${row.importKey}`,
         ],
+        diff: diffAgainst(c, row, allotments),
       });
       continue;
     }
 
     // (3) new client
-    planned.push({ row, action: "insert", client: null, allotments, hash, messages });
+    planned.push({ row, action: "insert", client: null, allotments, hash, messages, diff: null });
   }
 
   // --- create batch ---
   const { data: batch, error: batchErr } = await supabase
     .from("import_batches")
-    .insert({ filename: opts.filename, dry_run: opts.dryRun })
+    .insert({ filename: opts.filename, dry_run: opts.dryRun, created_by: opts.actorStaffId ?? null })
     .select("id")
     .single();
   if (batchErr) throw batchErr;
   const batchId = batch.id as string;
 
   const results: RowResult[] = [];
+  const activities: SyncActivity[] = [];
   let missingFlagged = 0;
 
   if (!opts.dryRun) {
@@ -218,9 +302,9 @@ export async function runSync(
       const idByKey = new Map(data!.map((d) => [d.import_key, d.id]));
       for (const p of slice) {
         p.client = {
+          ...p.row.fields,
           id: idByKey.get(p.row.importKey)!,
           import_key: p.row.importKey,
-          pan: p.row.fields.pan,
           row_hash: p.hash,
           status: "active",
           manual_fields: [],
@@ -256,16 +340,24 @@ export async function runSync(
         if (error) throw error;
       }
     }
-    const unchangedIds = planned
-      .filter((p) => p.action === "unchanged")
-      .map((p) => p.client!.id);
-    await chunked(unchangedIds, async (slice) => {
-      const { error } = await supabase
-        .from("clients")
-        .update({ last_seen_batch_id: batchId, status: "active" })
-        .in("id", slice);
+    const unchanged = planned.filter((p) => p.action === "unchanged");
+    await chunked(
+      unchanged.map((p) => p.client!.id),
+      async (slice) => {
+        const { error } = await supabase
+          .from("clients")
+          .update({ last_seen_batch_id: batchId, status: "active" })
+          .in("id", slice);
+        if (error) throw error;
+      }
+    );
+    // Re-stamp the hash where only CRM-protected fields moved in the sheet, so
+    // the same non-change isn't re-evaluated on every sync (rare, so per row).
+    for (const p of unchanged) {
+      if (p.client!.row_hash === p.hash) continue;
+      const { error } = await supabase.from("clients").update({ row_hash: p.hash }).eq("id", p.client!.id);
       if (error) throw error;
-    });
+    }
 
     // replace import-sourced allotments for every non-unchanged, seen client
     const touched = planned.filter(
@@ -306,9 +398,66 @@ export async function runSync(
       .update({ status: "missing_from_sheet" })
       .eq("status", "active")
       .neq("last_seen_batch_id", batchId)
-      .select("id");
+      .select("id, name");
     if (missErr) throw missErr;
     missingFlagged = flagged?.length ?? 0;
+
+    // --- activity feed: one row per changed client ---
+    const activityRows = [
+      ...touched.map((p) => {
+        const isInsert = p.action === "insert";
+        const changes: ChangeSet = isInsert
+          ? Object.fromEntries(
+              [
+                ...FIELD_KEYS.filter((k) => p.row.fields[k] != null).map((k) => [k, { from: null, to: p.row.fields[k] }]),
+                ...Object.entries(p.allotments).map(([role, sid]) => [
+                  `incharge.${role}`,
+                  { from: null, to: staffName.get(sid) ?? sid },
+                ]),
+              ]
+            )
+          : p.diff ?? {};
+        return {
+          client_id: p.client!.id,
+          clientName: p.row.fields.name,
+          action: (isInsert ? "sheet_insert" : "sheet_update") as SyncActivity["action"],
+          summary: isInsert ? "Added from the master sheet" : changeSummary(changes),
+          changes,
+        };
+      }),
+      ...(flagged ?? []).map((c) => ({
+        client_id: c.id as string,
+        clientName: c.name as string,
+        action: "sheet_missing" as SyncActivity["action"],
+        summary: "Row removed from the master sheet",
+        changes: { status: { from: "active", to: "missing_from_sheet" } } as ChangeSet,
+      })),
+    ];
+    await chunked(activityRows, async (slice) => {
+      const { data, error } = await supabase
+        .from("client_activity")
+        .insert(
+          slice.map((a) => ({
+            client_id: a.client_id,
+            actor_staff_id: opts.actorStaffId ?? null,
+            action: a.action,
+            summary: a.summary,
+            changes: a.changes,
+          }))
+        )
+        .select("id, client_id");
+      if (error) throw error;
+      const idByClient = new Map((data ?? []).map((d) => [d.client_id as string, d.id as string]));
+      for (const a of slice) {
+        activities.push({
+          clientId: a.client_id,
+          clientName: a.clientName,
+          activityId: idByClient.get(a.client_id) ?? null,
+          action: a.action,
+          changes: a.changes,
+        });
+      }
+    });
   }
 
   // --- persist row report ---
@@ -321,7 +470,7 @@ export async function runSync(
         ? "skipped"
         : p.action,
     raw: p.row.raw,
-    diff: null,
+    diff: p.diff,
     messages: p.messages,
   }));
   await chunked(rowRecords, async (slice) => {
@@ -347,15 +496,23 @@ export async function runSync(
       importKey: p.row.importKey,
       clientId: p.client?.id ?? null,
       messages: p.messages,
-      diff: null,
+      diff: p.diff,
     });
   }
 
-  const summary = { counts, missingFlagged, unresolvedAliases };
+  const summary = { counts, missingFlagged, unresolvedAliases, changedClients: activities.length };
   await supabase
     .from("import_batches")
     .update({ finished_at: new Date().toISOString(), summary })
     .eq("id", batchId);
 
-  return { batchId, dryRun: opts.dryRun, counts, missingFlagged, unresolvedAliases, rows: results };
+  return {
+    batchId,
+    dryRun: opts.dryRun,
+    counts,
+    missingFlagged,
+    unresolvedAliases,
+    rows: results,
+    activities,
+  };
 }

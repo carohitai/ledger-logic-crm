@@ -65,13 +65,30 @@ export function fieldsFor(isAdmin: boolean): EditableField[] {
   return isAdmin ? EDITABLE_FIELDS : EDITABLE_FIELDS.filter((f) => !f.adminOnly);
 }
 
-export const FIELD_LABELS: Record<string, string> = Object.fromEntries(
-  EDITABLE_FIELDS.map((f) => [f.key, f.label])
-);
+/** Change keys used for team-allotment edits, alongside the column keys above. */
+export const ALLOTMENT_CHANGE_KEYS: Record<string, string> = {
+  "incharge.partner": "Partner incharge",
+  "incharge.income_tax": "Income Tax incharge",
+  "incharge.billing": "Billing incharge",
+  "incharge.accounts": "Accounts incharge",
+  "incharge.data_entry": "Data Entry assistance",
+  "incharge.gst": "GST incharge",
+};
+
+export const FIELD_LABELS: Record<string, string> = {
+  ...Object.fromEntries(EDITABLE_FIELDS.map((f) => [f.key, f.label])),
+  ...ALLOTMENT_CHANGE_KEYS,
+};
+
+export type ChangeSet = Record<string, { from: unknown; to: unknown }>;
 
 /** Human-readable one-liner for the notification feed. */
-export function changeSummary(changes: Record<string, { from: unknown; to: unknown }>): string {
+export function changeSummary(changes: ChangeSet): string {
   const keys = Object.keys(changes);
   if (!keys.length) return "No changes";
   return keys.map((k) => FIELD_LABELS[k] ?? k).join(", ");
+}
+
+export function labelFor(key: string): string {
+  return FIELD_LABELS[key] ?? key.replaceAll("_", " ");
 }

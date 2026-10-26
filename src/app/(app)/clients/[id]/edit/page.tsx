@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/button";
 import { BackLink } from "@/components/back-link";
 import { fieldsFor, changeSummary } from "@/lib/client-profile";
+import { queueChangeNotice } from "@/lib/notify/queue";
 
 const cardStyle = {
   background: "var(--white)",
@@ -47,7 +48,7 @@ export default async function EditClientPage({
     } = await supabase.auth.getUser();
     const { data: actor } = await supabase
       .from("staff")
-      .select("id, app_role")
+      .select("id, app_role, full_name")
       .eq("auth_user_id", user!.id)
       .maybeSingle();
 
@@ -82,12 +83,25 @@ export default async function EditClientPage({
         .eq("id", id);
       if (error) throw error;
 
-      await supabase.from("client_activity").insert({
-        client_id: id,
-        actor_staff_id: actor?.id ?? null,
-        action: "updated",
-        summary: changeSummary(changes),
+      const { data: activity } = await supabase
+        .from("client_activity")
+        .insert({
+          client_id: id,
+          actor_staff_id: actor?.id ?? null,
+          action: "updated",
+          summary: changeSummary(changes),
+          changes,
+        })
+        .select("id")
+        .maybeSingle();
+
+      // Tell the client's Team (and the firm channel) once the redirect is out.
+      queueChangeNotice({
+        clientId: id,
+        activityId: activity?.id ?? null,
+        kind: "updated",
         changes,
+        actorName: actor?.full_name ?? user?.email ?? "A team member",
       });
     }
 
