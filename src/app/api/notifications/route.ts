@@ -43,7 +43,9 @@ export async function GET() {
       action: r.action,
       summary: r.summary,
       createdAt: r.created_at,
-      actor: (Array.isArray(staff) ? staff[0]?.full_name : staff?.full_name) ?? "Someone",
+      actor:
+        (Array.isArray(staff) ? staff[0]?.full_name : staff?.full_name) ??
+        (String(r.action).startsWith("sheet_") ? "Master sheet" : "Someone"),
       client: (Array.isArray(client) ? client[0]?.name : client?.name) ?? null,
     };
   });

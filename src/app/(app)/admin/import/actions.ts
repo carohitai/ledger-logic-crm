@@ -1,10 +1,10 @@
 "use server";
 
-import Papa from "papaparse";
-import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { downloadClientList } from "@/lib/graph";
+import { parseClientListFile } from "@/lib/import/parse";
 import { runSync, type SyncReport } from "@/lib/import/sync";
+import { notifyCommittedSync } from "./notify";
 
 export interface ImportState {
   report: SyncReport | null;
@@ -21,28 +21,11 @@ async function requireAdmin() {
   if (!user) throw new Error("Not signed in");
   const { data: me } = await supabase
     .from("staff")
-    .select("app_role")
+    .select("id, app_role")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (me?.app_role !== "admin") throw new Error("Admin only");
-  return supabase;
-}
-
-function parseFile(name: string, buf: ArrayBuffer): Record<string, string>[] {
-  if (name.toLowerCase().endsWith(".csv")) {
-    const text = new TextDecoder("utf-8").decode(buf).replace(/^﻿/, "");
-    const parsed = Papa.parse<Record<string, string>>(text, {
-      header: true,
-      skipEmptyLines: "greedy",
-    });
-    return parsed.data;
-  }
-  const wb = XLSX.read(buf, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<Record<string, string>>(sheet, {
-    defval: "",
-    raw: false,
-  });
+  return { supabase, staffId: me.id as string };
 }
 
 export async function runImport(
@@ -51,7 +34,7 @@ export async function runImport(
 ): Promise<ImportState> {
   let source: string | null = null;
   try {
-    const supabase = await requireAdmin();
+    const { supabase, staffId } = await requireAdmin();
     const mode = String(formData.get("mode") ?? "dryrun");
     const applyRenames = formData.get("applyRenames") === "on";
 
@@ -71,7 +54,7 @@ export async function runImport(
       source = `${file.name} (upload)`;
     }
 
-    const records = parseFile(filename, buf);
+    const records = parseClientListFile(filename, buf);
     if (records.length === 0)
       return { report: null, error: "No data rows found in the file.", source };
 
@@ -79,7 +62,9 @@ export async function runImport(
       filename,
       dryRun: mode !== "commit",
       applyRenames,
+      actorStaffId: staffId,
     });
+    if (!report.dryRun) notifyCommittedSync(report, filename);
     return { report, error: null, source };
   } catch (e) {
     return {

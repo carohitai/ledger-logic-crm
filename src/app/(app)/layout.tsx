@@ -65,6 +65,8 @@ export default async function AppLayout({
             <>
               <NavLink href="/admin/import">Import</NavLink>
               <NavLink href="/admin/staff">Staff</NavLink>
+              <NavLink href="/admin/teams-map">Teams map</NavLink>
+              <NavLink href="/admin/integrations">Integrations</NavLink>
             </>
           )}
           <span className="ml-auto flex items-center gap-2.5">
