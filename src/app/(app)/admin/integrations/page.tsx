@@ -313,7 +313,7 @@ export default async function IntegrationsPage({
           </p>
         )}
         <p className="mt-2 text-[13px]" style={MUTED}>
-          Cron checks every 30 minutes and imports only when the workbook changed. Last run {fmt(syncState?.last_run_at)}
+          The daily cron (and any Power Automate trigger) imports only when the workbook changed. Last run {fmt(syncState?.last_run_at)}
           {syncState?.last_error ? <span style={{ color: "var(--danger)" }}> · last error: {syncState.last_error}</span> : null}
           {syncState?.cursor && link.configured && link.error === null && link.file.eTag && syncState.cursor !== link.file.eTag ? (
             <span style={{ color: "#8F6A2E" }}> · the workbook has changed since the last import</span>

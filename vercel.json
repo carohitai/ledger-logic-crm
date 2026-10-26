@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/sheet-sync",
-      "schedule": "*/30 * * * *"
+      "schedule": "30 3 * * *"
     }
   ]
 }

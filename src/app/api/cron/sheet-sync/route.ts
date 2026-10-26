@@ -3,9 +3,10 @@ import { createServiceClient, serviceConfigured } from "@/lib/supabase/service";
 import { runSheetSync } from "@/lib/import/sheet-sync";
 
 // Pulls the master client list from SharePoint when its content changed and
-// notifies the teams concerned. Scheduled by vercel.json; can also be hit by a
-// Power Automate "when a file is modified" flow for near-instant syncs, with
-// the same bearer secret. `?force=true` re-imports even if the eTag matches.
+// notifies the teams concerned. Scheduled daily by vercel.json (Vercel Hobby
+// allows daily crons only; raise the frequency on Pro); for near-instant syncs
+// a Power Automate "when a file is modified" flow can call this with the same
+// bearer secret. `?force=true` re-imports even if the eTag matches.
 //
 // A full import of ~1,000 rows plus Teams fan-out takes well under a minute;
 // maxDuration leaves headroom for a busy digest.

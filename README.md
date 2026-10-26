@@ -29,7 +29,7 @@ watches it, imports every change and tells the people concerned.
 
 ```
 OneDrive / SharePoint workbook
-        │  (Graph, app-only; eTag change detection, every 30 min or on demand)
+        │  (Graph, app-only; eTag change detection, daily cron / Power Automate / on demand)
         ▼
 /api/cron/sheet-sync ──► runSync: diff per client + incharge ──► client_activity
         │                                                            │
@@ -61,10 +61,12 @@ fan-out, so the team hears about a change whichever side it was made on.
 5. **Map teams** — *Refresh directory* on Integrations, then on **Teams map**
    accept the confident name matches in batches of 40 and pick the rest by hand
    (also possible from each client page). Choose a firm-wide channel for the digest.
-6. Cron (`vercel.json`) runs `/api/cron/sheet-sync` every 30 minutes. For an
-   instant sync, point a Power Automate flow (*When a file is modified* →
-   *HTTP POST* `https://<APP_URL>/api/cron/sheet-sync` with header
-   `Authorization: Bearer <CRON_SECRET>`) at the workbook.
+6. Cron (`vercel.json`) runs `/api/cron/sheet-sync` daily at 09:00 IST — the
+   Vercel Hobby plan only allows daily crons (Pro unlocks e.g. `*/30 * * * *`).
+   For a near-instant sync, point a Power Automate flow (*When a file is
+   modified* → *HTTP POST* `https://<APP_URL>/api/cron/sheet-sync` with header
+   `Authorization: Bearer <CRON_SECRET>`) at the workbook; the eTag check makes
+   repeated triggers harmless.
 
 ### Why a connected account and not an app-only token
 
